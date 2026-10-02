@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin — QR ID</title>
+<link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+
+<!-- ============================ LOGIN ============================ -->
+<div id="login-view" class="login-wrap hidden">
+  <form class="login-card" id="login-form" autocomplete="on">
+    <div class="logo">
+      <div class="mark" id="login-mark">ID</div>
+      <div>
+        <h1>Admin sign-in</h1>
+        <p class="sub" id="login-sub">Member ID &amp; QR management</p>
+      </div>
+    </div>
+    <label class="f"><span>Username</span>
+      <input type="text" id="login-user" name="username" autocomplete="username" required>
+    </label>
+    <label class="f"><span>Password</span>
+      <input type="password" id="login-pass" name="password" autocomplete="current-password" required>
+    </label>
+    <div class="btn-row">
+      <button type="submit" class="btn primary" id="login-btn" style="flex:1">Sign in</button>
+    </div>
+    <div class="login-hint" id="login-hint">
+      First run? Sign in with <span class="kbd">admin</span> / <span class="kbd">admin123</span>, then change the
+      password in the <b>Security</b> tab straight away.
+    </div>
+  </form>
+</div>
+
+<!-- ============================= APP ============================= -->
+<div id="app-view" class="hidden">
+  <header class="topbar">
+    <div class="brand"><div class="mark" id="brand-mark">ID</div><span id="brand-name">QR ID</span></div>
+    <span class="org" id="brand-org"></span>
+    <nav class="tabs">
+      <button data-tab="members" class="active">Members</button>
+      <button data-tab="settings">Card &amp; Organization</button>
+      <button data-tab="security">Security</button>
+    </nav>
+    <span class="spacer"></span>
+    <span class="who" id="who"></span>
+    <button class="btn small" id="logout-btn">Sign out</button>
+  </header>
+
+  <main>
+    <div class="banner hidden" id="default-pass-banner">
+      <span>You are still using the default password. Anyone who knows it can print valid ID cards — change it now.</span>
+      <button class="btn small" id="banner-fix">Open Security</button>
+    </div>
+
+    <!-- ------------------------- members tab ------------------------ -->
+    <section id="tab-members">
+      <div class="stats" id="stats"></div>
+
+      <div class="toolbar-row">
+        <input type="search" id="search" class="grow" placeholder="Search by name, member number, phone, department…">
+        <select id="status-filter" style="width:auto">
+          <option value="">All members</option>
+          <option value="active">Active only</option>
+          <option value="revoked">Revoked only</option>
+        </select>
+        <button class="btn primary" id="add-btn">+ Add new member</button>
+        <a class="btn" href="/admin/sheet?status=active" target="_blank" rel="noopener">Print all QR sheets</a>
+        <a class="btn" href="/api/export.csv">Export CSV</a>
+      </div>
+
+      <div class="members-grid" id="members-grid"></div>
+      <div class="empty hidden" id="members-empty">
+        <div class="ic">&#128100;</div>
+        <p id="empty-text">No members yet. Click <b>Add new member</b> to create the first ID card.</p>
+      </div>
+    </section>
+
+    <!-- ------------------------ settings tab ------------------------ -->
+    <section id="tab-settings" class="hidden">
+      <form class="panel" id="settings-form" style="max-width:760px">
+        <h2>Organization &amp; card</h2>
+        <p class="hint">These details appear on the admin panel, the public verification page and the printed card back.</p>
+
+        <div class="logo-row">
+          <div class="logo-preview" id="logo-preview">No logo</div>
+          <div>
+            <div class="btn-row">
+              <button type="button" class="btn small" id="logo-pick">Upload logo</button>
+              <button type="button" class="btn small danger" id="logo-remove">Remove</button>
+            </div>
+            <div class="photo-hint" style="margin-top:6px">PNG or JPG, square works best. Shown on the card and the scan page.</div>
+          </div>
+          <input type="file" id="logo-file" accept="image/*" class="hidden">
+        </div>
+
+        <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+
+        <div class="grid-2">
+          <label class="f"><span>Organization name</span>
+            <input type="text" id="s_org_name" placeholder="e.g. Ethiopian National Party">
+          </label>
+          <label class="f"><span>Name in second language <span class="opt">(optional)</span></span>
+            <input type="text" id="s_org_name_alt" placeholder="e.g. የኢትዮጵያ ብሔራዊ ፓርቲ">
+          </label>
+          <label class="f"><span>Card title</span>
+            <input type="text" id="s_card_title" placeholder="MEMBER ID">
+          </label>
+          <label class="f"><span>Tagline under the name</span>
+            <input type="text" id="s_org_tagline" placeholder="Official Member Identity Card">
+          </label>
+          <label class="f"><span>Member number prefix</span>
+            <input type="text" id="s_id_prefix" placeholder="MBR">
+          </label>
+          <label class="f"><span>Card colour</span>
+            <div class="btn-row"><input type="color" id="s_theme_color" value="#0b5d3b">
+              <input type="text" id="s_theme_text" style="width:110px" placeholder="#0b5d3b"></div>
+          </label>
+        </div>
+
+        <label class="f"><span>Public address of this system</span>
+          <input type="text" id="s_base_url" placeholder="https://id.yourparty.org">
+        </label>
+        <p class="hint" style="margin-top:-6px">
+          This is what gets written into every QR code. Set it to the public address where this server is reachable,
+          so cards keep working no matter which computer prints them. Leave empty to use the address in your browser bar
+          (<b id="s_base_effective"></b>).
+        </p>
+
+        <label class="f"><span>Text next to the QR code on the card</span>
+          <input type="text" id="s_verify_note" placeholder="Scan to verify this member online.">
+        </label>
+        <label class="f"><span>Footer note printed on the card</span>
+          <textarea id="s_footer_note" placeholder="This card is the property of the issuing organization…"></textarea>
+        </label>
+
+        <div class="btn-row">
+          <button type="submit" class="btn primary" id="settings-save">Save settings</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ------------------------ security tab ------------------------ -->
+    <section id="tab-security" class="hidden">
+      <form class="panel" id="password-form" style="max-width:480px">
+        <h2>Change password</h2>
+        <p class="hint">Only the admin account can print or issue cards, so use a strong password.</p>
+        <label class="f"><span>Current password</span>
+          <input type="password" id="p_current" autocomplete="current-password" required>
+        </label>
+        <label class="f"><span>New password (at least 8 characters)</span>
+          <input type="password" id="p_next" autocomplete="new-password" minlength="8" required>
+        </label>
+        <label class="f"><span>Repeat new password</span>
+          <input type="password" id="p_next2" autocomplete="new-password" minlength="8" required>
+        </label>
+        <div class="btn-row"><button type="submit" class="btn primary">Update password</button></div>
+      </form>
+
+      <div class="panel" style="max-width:480px">
+        <h2>How the QR stays safe</h2>
+        <p class="hint" style="margin-bottom:10px">Things worth knowing before you print a thousand cards:</p>
+        <ul style="margin:0;padding-left:18px;line-height:1.75;font-size:13px;color:#344054">
+          <li>The QR holds a random link, not the member's data — nobody can build a matching QR without access to this panel.</li>
+          <li>Scans always show the live record, so editing a name or photo updates every card instantly.</li>
+          <li><b>Revoke</b> kills a card immediately; <b>Reissue QR</b> makes a new QR and voids all old printed copies.</li>
+          <li>The printed code (e.g. <span class="kbd">VR-4F2A-91C3</span>) is signed, so it can also be checked by eye against the screen.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ========================= MEMBER MODAL ========================= -->
+<div id="member-modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="modal-title">Add new member</h2>
+      <span class="spacer"></span>
+      <button class="x" id="modal-close" title="Close">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="modal-split">
+        <!-- -------- left: the form -------- -->
+        <form id="member-form">
+          <label class="f"><span>Photo <span class="opt">(optional — upload from device)</span></span></label>
+          <div class="photo-row" style="margin-bottom:14px">
+            <div class="photo-drop" id="photo-drop" title="Click or drop an image here">
+              <svg class="ph" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1c0-2.76-3.58-5-8-5Z"/></svg>
+              <span class="lbl">Upload photo</span>
+            </div>
+            <div>
+              <div class="photo-hint">
+                Click the box or drop a picture in. JPG or PNG, passport-style works best.<br>
+                Without a photo the card shows a neutral person icon.
+              </div>
+              <div class="btn-row" style="margin-top:8px">
+                <button type="button" class="btn small" id="photo-pick">Choose file</button>
+                <button type="button" class="btn small danger" id="photo-clear">Remove photo</button>
+              </div>
+            </div>
+            <input type="file" id="photo-file" accept="image/*" class="hidden">
+          </div>
+
+          <div class="grid-2">
+            <label class="f"><span>Full name *</span>
+              <input type="text" id="m_full_name" placeholder="Abebe Bikila Tesfaye" required>
+            </label>
+            <label class="f"><span>Name in second language <span class="opt">(optional)</span></span>
+              <input type="text" id="m_full_name_alt" placeholder="አበበ ቢኪላ ተስፋዬ">
+            </label>
+          </div>
+
+          <div class="grid-3">
+            <label class="f"><span>Sex</span>
+              <select id="m_sex">
+                <option value="">—</option>
+                <option>Female</option><option>Male</option>
+              </select>
+            </label>
+            <label class="f"><span>Date of birth</span><input type="date" id="m_dob"></label>
+            <label class="f"><span>Blood type</span>
+              <select id="m_blood_type">
+                <option value="">—</option>
+                <option>O+</option><option>O-</option><option>A+</option><option>A-</option>
+                <option>B+</option><option>B-</option><option>AB+</option><option>AB-</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="grid-2">
+            <label class="f"><span>Phone</span><input type="tel" id="m_phone" placeholder="+251 91 234 5678"></label>
+            <label class="f"><span>Alternate phone</span><input type="tel" id="m_phone_alt"></label>
+          </div>
+
+          <label class="f"><span>Email</span><input type="email" id="m_email" placeholder="name@example.com"></label>
+
+          <div class="grid-3">
+            <label class="f"><span>Member number</span><input type="text" id="m_member_no" placeholder="auto"></label>
+            <label class="f"><span>Position / role</span><input type="text" id="m_role" placeholder="Party member"></label>
+            <label class="f"><span>Department / branch</span><input type="text" id="m_department"></label>
+          </div>
+          <p class="hint" style="margin:-6px 0 12px">Leave the member number empty to generate one automatically
+            (format: <span id="m_no_hint">MBR-2026-0001</span>).</p>
+
+          <div class="grid-2">
+            <label class="f"><span>Region / zone</span><input type="text" id="m_region"></label>
+            <label class="f"><span>Address</span><input type="text" id="m_address"></label>
+          </div>
+
+          <div class="grid-2">
+            <label class="f"><span>Joined date</span><input type="date" id="m_joined_date"></label>
+            <label class="f"><span>Card valid until</span><input type="date" id="m_expiry_date"></label>
+          </div>
+
+          <label class="f"><span>Notes / additional information shown when scanned <span class="opt">(optional)</span></span>
+            <textarea id="m_notes" placeholder="Anything the person scanning should also know (member category, registration office, …)"></textarea>
+          </label>
+
+          <label class="f"><span>Status</span>
+            <select id="m_status">
+              <option value="active">Active — card is valid</option>
+              <option value="revoked">Revoked — card must be rejected</option>
+            </select>
+          </label>
+        </form>
+
+        <!-- -------- right: QR + actions -------- -->
+        <div>
+          <div class="side-card" style="margin-bottom:14px">
+            <h3>QR code for the card back</h3>
+            <p class="sub" id="qr-sub">Save the member first — the QR code is generated automatically.</p>
+            <div class="qr-box" id="qr-box">
+              <img id="qr-img" alt="Member QR code" class="hidden">
+              <div id="qr-placeholder" style="padding:26px 8px;color:#98a2b3;font-size:12.5px">No QR yet</div>
+              <div class="code hidden" id="qr-code"></div>
+              <div class="url hidden" id="qr-url"></div>
+            </div>
+            <div class="btn-row" style="margin-top:12px" id="qr-actions">
+              <button type="button" class="btn small primary" id="print-card" disabled>Print card back</button>
+              <button type="button" class="btn small" id="dl-qr" disabled>Download PNG</button>
+              <button type="button" class="btn small" id="print-sheet" disabled>Print A4 sheet</button>
+              <button type="button" class="btn small" id="copy-link" disabled>Copy link</button>
+            </div>
+          </div>
+
+          <div class="side-card">
+            <h3>Scan history</h3>
+            <p class="sub"><span id="scan-total">0</span> scan(s) recorded for this member.</p>
+            <ul class="scans" id="scans-list"><li class="empty-line">Not saved yet.</li></ul>
+          </div>
+
+          <div class="side-card hidden" id="danger-card" style="margin-top:14px">
+            <h3>Card control</h3>
+            <p class="sub">Lost card? Reissue makes a new QR and instantly voids every old copy.</p>
+            <div class="btn-row">
+              <button type="button" class="btn small" id="toggle-revoke">Revoke card</button>
+              <button type="button" class="btn small" id="reissue-btn">Reissue QR</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-foot">
+      <button type="submit" class="btn primary" id="member-save" form="member-form">Save member</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn danger hidden" id="member-delete">Delete member</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= CONFIRM MODAL ======================== -->
+<div id="confirm-modal" class="modal hidden">
+  <div class="modal-card confirm-card">
+    <div class="modal-head"><h2 id="confirm-title">Are you sure?</h2></div>
+    <div class="modal-body"><p id="confirm-text"></p></div>
+    <div class="modal-foot">
+      <button class="btn" id="confirm-no">Cancel</button>
+      <span class="spacer"></span>
+      <button class="btn primary danger" id="confirm-yes">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script src="/admin/app.js"></script>
+</body>
+</html>
