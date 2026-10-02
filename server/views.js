@@ -194,17 +194,18 @@ function cardBackHtml({ member, settings, qrDataUrl }) {
 </div>`;
 }
 
-async function printPage({ member, settings, verifyUrl }) {
+async function printPage({ member, settings, verifyUrl, sessionToken = '' }) {
   const qrDataUrl = await qrPngDataUrl(verifyUrl, 640);
   const card = cardBackHtml({ member, settings, qrDataUrl });
+  const q = sessionToken ? `?t=${encodeURIComponent(sessionToken)}` : '';
   const body = `
 <div class="toolbar no-print">
   <span class="title">Card back &middot; ${esc(member.full_name)} &middot; ${esc(member.member_no)}</span>
   <span class="spacer"></span>
   <a href="${esc(verifyUrl)}" target="_blank" rel="noopener">Open public page</a>
-  <a href="/api/members/${Number(member.id)}/qr.png" download="qr-${esc(member.member_no)}.png">Download QR</a>
+  <a href="/api/members/${Number(member.id)}/qr.png${esc(q)}" download="qr-${esc(member.member_no)}.png">Download QR</a>
   <button onclick="window.print()">Print card</button>
-  <a href="/admin/">&larr; Back to admin</a>
+  <a href="/admin/${esc(q)}">&larr; Back to admin</a>
 </div>
 <div class="card-sheet">${card}</div>
 <p class="no-print" style="text-align:center;font:13px -apple-system,Segoe UI,Roboto,sans-serif;color:#5b6474;max-width:640px;margin:0 auto">
@@ -214,7 +215,7 @@ async function printPage({ member, settings, verifyUrl }) {
   return shell({ title: `Card back — ${member.full_name}`, body });
 }
 
-async function sheetPage({ members, settings, urlFor }) {
+async function sheetPage({ members, settings, urlFor, sessionToken = '' }) {
   const perPage = 8;
   const pages = [];
   for (let i = 0; i < members.length; i += perPage) pages.push(members.slice(i, i + perPage));
@@ -239,7 +240,7 @@ async function sheetPage({ members, settings, urlFor }) {
   <span class="title">QR sheets &middot; ${members.length} card${members.length === 1 ? '' : 's'}</span>
   <span class="spacer"></span>
   <button onclick="window.print()">Print sheet</button>
-  <a href="/admin/">&larr; Back to admin</a>
+  <a href="/admin/${sessionToken ? `?t=${encodeURIComponent(sessionToken)}` : ''}">&larr; Back to admin</a>
 </div>
 ${rendered.join('\n')}
 <p class="no-print" style="text-align:center;font:13px -apple-system,Segoe UI,Roboto,sans-serif;color:#5b6474;margin:0 0 40px">

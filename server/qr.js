@@ -31,10 +31,22 @@ function verifyCode(token) {
   return `VR-${raw.slice(0, 4)}-${raw.slice(4)}`;
 }
 
-/** Absolute base URL used inside QR codes. */
+/**
+ * Absolute base URL used inside QR codes.
+ *
+ * `https://host/anything/path` is normalised so a pasted link still yields a
+ * clean QR target, and a URL without a scheme gets one.
+ */
 function baseUrl(req, settings) {
-  const configured = (settings && settings.base_url ? String(settings.base_url) : '').trim();
-  if (configured) return configured.replace(/\/+$/, '');
+  let configured = (settings && settings.base_url ? String(settings.base_url) : '').trim();
+  if (configured) {
+    if (!/^https?:\/\//i.test(configured)) configured = `https://${configured}`;
+    try {
+      return new URL(configured).origin;
+    } catch {
+      /* fall through to the request host */
+    }
+  }
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
   return `${proto}://${req.get('host')}`.replace(/\/+$/, '');
 }

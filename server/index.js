@@ -69,6 +69,17 @@ function requireIdParam(req, res) {
   return id;
 }
 
+const sameOrigin = (req) => {
+  const origin = req.get('origin');
+  if (!origin) return true;
+  try {
+    const originHost = new URL(origin).host;
+    return originHost === req.get('host') || originHost.endsWith('.e2b.app');
+  } catch {
+    return false;
+  }
+};
+
 /* ---------------------------------------------------------------- *
  * Auth API
  * ---------------------------------------------------------------- */
@@ -93,6 +104,9 @@ app.post('/api/login', (req, res) => {
   auth.setSessionCookie(req, res, session.token);
   res.json({
     ok: true,
+    // The cookie is the real credential; `token` is only a fallback for
+    // embedded browsers that drop third-party cookies (see auth.js).
+    token: session.token,
     csrf: session.csrf,
     admin: { id: Number(admin.id), username: admin.username, full_name: admin.full_name },
     settings: settingsJson(getSettings(), req),
@@ -100,7 +114,8 @@ app.post('/api/login', (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
-  auth.destroySession(auth.parseCookies(req)[auth.COOKIE_NAME]);
+  const session = auth.currentSession(req);
+  auth.destroySession(session ? session.token : auth.parseCookies(req)[auth.COOKIE_NAME]);
   auth.clearSessionCookie(req, res);
   res.json({ ok: true });
 });
@@ -110,6 +125,7 @@ app.get('/api/me', (req, res) => {
   if (!session) return res.status(401).json({ error: 'Not signed in' });
   res.json({
     admin: session.admin,
+    token: session.token,
     csrf: session.csrf,
     settings: settingsJson(getSettings(), req),
     default_password: !!createdDefaultAdmin,
@@ -175,11 +191,7 @@ app.get('/api/members/:id', auth.requireAuth, async (req, res) => {
 app.put('/api/members/:id', auth.requireAuth, auth.requireCsrf, async (req, res) => {
   const id = requireIdParam(req, res);
   if (!id) return;
-  const data = { ...(req.body || {}) };
-  if (data.photo_path === null || data.photo_path === '') {
-    // keep existing unless the client explicitly sent null
-  }
-  const member = members.updateMember(id, data);
+  const member = members.updateMember(id, { ...(req.body || {}) });
   res.json({ member: await memberDetail(member, req) });
 });
 
@@ -346,6 +358,7 @@ app.get('/admin/print/:id', auth.requireAuthPage, async (req, res) => {
       member,
       settings,
       verifyUrl: qr.publicUrl(req, settings, member.token),
+      sessionToken: req.session.token,
     })
   );
 });
@@ -367,6 +380,7 @@ app.get('/admin/sheet', auth.requireAuthPage, async (req, res) => {
       members: rows,
       settings,
       urlFor: (m) => qr.publicUrl(req, settings, m.token),
+      sessionToken: req.session.token,
     })
   );
 });
@@ -375,7 +389,16 @@ app.get('/admin/sheet', auth.requireAuthPage, async (req, res) => {
  * Static files + errors
  * ---------------------------------------------------------------- */
 
-app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'] }));
+app.use(
+  express.static(path.join(__dirname, '..', 'public'), {
+    extensions: ['html'],
+    setHeaders(res, filePath) {
+      // The panel is a small SPA plus a CSS file: force revalidation so a
+      // redeploy is picked up instead of serving a stale cached app.js.
+      if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+    },
+  })
+);
 
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });

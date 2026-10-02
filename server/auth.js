@@ -51,6 +51,15 @@ function destroySession(token) {
   if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
 }
 
+const cookieOptions = (req) => ({
+  path: '/',
+  httpOnly: true,
+  sameSite: 'lax',
+  maxAge: SESSION_DAYS * 86400 * 1000,
+  // Serve over HTTPS and the cookie is marked Secure automatically.
+  secure: (req.headers['x-forwarded-proto'] || req.protocol) === 'https',
+});
+
 function parseCookies(req) {
   const header = req.headers.cookie || '';
   const out = {};
@@ -62,9 +71,26 @@ function parseCookies(req) {
   return out;
 }
 
-/** Returns { admin, csrf } for a valid session, otherwise null. */
-function currentSession(req) {
-  const token = parseCookies(req)[COOKIE_NAME];
+/**
+ * Session token from an `Authorization: Bearer …` header, a `?t=` query
+ * parameter, or the session cookie (in that order).
+ *
+ * The cookie is the normal path. The header/query fallbacks exist because the
+ * panel is sometimes served inside an embedding page where the browser refuses
+ * to store or send third-party cookies, and because print pages are opened in
+ * a separate tab.
+ */
+function tokenFromRequest(req) {
+  const header = (req.get && req.get('authorization')) || '';
+  const bearer = String(header).match(/^Bearer\s+(\S+)$/i);
+  if (bearer) return bearer[1];
+  const fromQuery = req.query && typeof req.query.t === 'string' ? req.query.t : '';
+  if (fromQuery) return fromQuery;
+  return parseCookies(req)[COOKIE_NAME] || '';
+}
+
+/** Returns { admin, csrf } for a valid session token, otherwise null. */
+function sessionForToken(token) {
   if (!token) return null;
   const row = db
     .prepare(
@@ -85,19 +111,14 @@ function currentSession(req) {
   };
 }
 
-function cookieAttributes(req) {
-  const secure = (req.headers['x-forwarded-proto'] || req.protocol) === 'https';
-  const parts = ['Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${SESSION_DAYS * 86400}`];
-  if (secure) parts.push('Secure');
-  return parts.join('; ');
-}
+const currentSession = (req) => sessionForToken(tokenFromRequest(req));
 
 function setSessionCookie(req, res, token) {
-  res.setHeader('Set-Cookie', `${COOKIE_NAME}=${token}; ${cookieAttributes(req)}`);
+  res.cookie(COOKIE_NAME, token, cookieOptions(req));
 }
 
 function clearSessionCookie(req, res) {
-  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  res.clearCookie(COOKIE_NAME, { path: '/' });
 }
 
 function cleanupSessions() {

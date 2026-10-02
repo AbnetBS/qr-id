@@ -13,7 +13,20 @@ const state = {
   photoData: null,    // new photo as data URL
   photoRemoved: false,
   defaultPassword: false,
+  token: null,        // session token fallback (see api())
 };
+
+/* The session normally travels in an HttpOnly cookie. Browsers that block
+   third-party cookies (for example when this page is embedded elsewhere) drop
+   it, so the login response also gives us a token which we keep here and send
+   as an Authorization header. It is adopted from a ?t= link on load. */
+try {
+  const t = new URLSearchParams(location.search).get('t');
+  if (t) {
+    state.token = t;
+    history.replaceState(null, '', location.pathname);
+  }
+} catch { /* ignore */ }
 
 const PERSON_SVG = `<svg class="ph" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.42 0-8 2.24-8 5v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1c0-2.76-3.58-5-8-5Z"/></svg>`;
 
@@ -23,9 +36,16 @@ const esc = (v) =>
 
 /* ------------------------------ plumbing --------------------------- */
 
+/** Appends the session token to a URL (for links opened in a new tab). */
+function withToken(url) {
+  if (!state.token) return url;
+  return url + (url.includes('?') ? '&' : '?') + 't=' + encodeURIComponent(state.token);
+}
+
 async function api(path, { method = 'GET', body } = {}) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (state.token) headers.Authorization = `Bearer ${state.token}`;
   if (method !== 'GET' && state.csrf) headers['x-csrf-token'] = state.csrf;
 
   const res = await fetch(path, {
@@ -145,6 +165,8 @@ function showApp() {
   applySettings(state.settings);
   $('#who').textContent = state.admin ? `${state.admin.full_name || state.admin.username} (@${state.admin.username})` : '';
   $('#default-pass-banner').classList.toggle('hidden', !state.defaultPassword);
+  // New-tab links (print sheets, CSV) must work even if the cookie is blocked.
+  $$('a[href^="/api/"], a[href^="/admin/"]').forEach((a) => { a.href = withToken(a.getAttribute('href')); });
   loadMembers();
 }
 
@@ -155,6 +177,7 @@ function applySettings(settings) {
   $('#brand-name').textContent = settings.org_name || 'QR ID';
   $('#brand-mark').textContent = (settings.org_name || 'ID').trim().charAt(0).toUpperCase() || 'I';
   $('#brand-org').textContent = settings.org_tagline || '';
+  $('#login-mark').textContent = (settings.org_name || 'ID').trim().charAt(0).toUpperCase() || 'I';
   $('#login-sub').textContent = `${settings.org_name || 'Member ID'} · QR management`;
   $('#s_base_effective').textContent = settings.effective_base_url || '';
   fillSettingsForm(settings);
@@ -502,6 +525,7 @@ function bindEvents() {
       });
       state.admin = res.admin;
       state.csrf = res.csrf;
+      if (res.token) state.token = res.token;
       state.settings = res.settings;
       state.defaultPassword = false;
       $('#login-pass').value = '';
@@ -519,6 +543,7 @@ function bindEvents() {
   $('#logout-btn').addEventListener('click', async () => {
     try { await api('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
     state.csrf = null;
+    state.token = null;
     showLogin();
   });
 
@@ -563,13 +588,13 @@ function bindEvents() {
   $('#reissue-btn').addEventListener('click', reissueQr);
 
   $('#print-card').addEventListener('click', () => {
-    if (state.editing) window.open(`/admin/print/${state.editing}`, '_blank');
+    if (state.editing) window.open(withToken(`/admin/print/${state.editing}`), '_blank');
   });
   $('#print-sheet').addEventListener('click', () => {
-    if (state.editing) window.open(`/admin/sheet?ids=${state.editing}`, '_blank');
+    if (state.editing) window.open(withToken(`/admin/sheet?ids=${state.editing}`), '_blank');
   });
   $('#dl-qr').addEventListener('click', () => {
-    if (state.editing) window.location.href = `/api/members/${state.editing}/qr.png`;
+    if (state.editing) window.location.href = withToken(`/api/members/${state.editing}/qr.png`);
   });
   $('#copy-link').addEventListener('click', async () => {
     const url = $('#qr-url').textContent;
