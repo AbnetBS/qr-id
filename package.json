@@ -1,0 +1,19 @@
+{
+  "name": "qr-id",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Member ID card system with secure, verifiable QR codes -- admin panel, member records, printable QR card backs and a public verification page.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "reset-admin": "node --disable-warning=ExperimentalWarning server/reset-admin.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "qrcode": "^1.5.4"
+  }
+}

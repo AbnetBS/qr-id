@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR ID — member identity cards with QR verification</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/id.css">
+<style>
+  .landing { max-width: 760px; margin: 0 auto; padding: 40px 18px 60px; }
+  .hero h1 { font-size: 28px; margin: 0 0 10px; }
+  .hero p { color: var(--muted); font-size: 15px; line-height: 1.65; margin: 0 0 22px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 26px 0; }
+  .tile { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .tile h3 { margin: 0 0 6px; font-size: 15px; }
+  .tile p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .cta { display: inline-block; background: var(--brand, #0b5d3b); color: #fff; text-decoration: none;
+         padding: 12px 20px; border-radius: 10px; font-weight: 650; font-size: 14px; }
+  .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #eef1f6; border: 1px solid var(--line);
+         border-radius: 6px; padding: 1px 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="landing hero">
+  <h1>QR ID</h1>
+  <p>Issue member identity cards whose QR code proves the card is genuine and shows the member's full record
+     when scanned by any phone camera. Built for an organization register: political party, association,
+     club, company or cooperative.</p>
+
+  <a class="cta" href="/admin/">Open the admin panel</a>
+
+  <div class="cards">
+    <div class="tile">
+      <h3>QR you cannot forge</h3>
+      <p>The printed code is a random 128-bit link to this server — not the member's data — so nobody can
+         manufacture a matching card without access to the panel.</p>
+    </div>
+    <div class="tile">
+      <h3>Always up to date</h3>
+      <p>Scanned pages read the live record. Fix a phone number or photo once and every card in circulation
+         shows the new information.</p>
+    </div>
+    <div class="tile">
+      <h3>Revoke a lost card</h3>
+      <p>Mark a member revoked and the scan page refuses the card immediately. Reissue the QR to void every
+         old printed copy.</p>
+    </div>
+    <div class="tile">
+      <h3>Print-ready</h3>
+      <p>Card backs come out at true ID-card size (85.6 × 54 mm) and can be printed as individual cards or as
+         A4 sheets of eight.</p>
+    </div>
+  </div>
+
+  <p style="font-size:13px">First run: sign in with <span class="kbd">admin</span> / <span class="kbd">admin123</span>
+     and change the password right away.</p>
+</div>
+</body>
+</html>
