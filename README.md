@@ -204,7 +204,9 @@ data/            database, uploads, secret key (git-ignored, back this up)
 ## API (for your own integrations)
 
 All admin endpoints need the session cookie plus the `x-csrf-token` header (both are returned by
-`POST /api/login`).
+`POST /api/login`). If cookies are unavailable — for example when the panel is embedded in another
+page — `POST /api/login` also returns a `token` that can be sent instead as
+`Authorization: Bearer <token>`, or appended to a page URL as `?t=<token>`.
 
 | Method | Path | Purpose |
 | --- | --- | --- |

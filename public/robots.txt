@@ -1,0 +1,6 @@
+# Member records are private: keep the admin panel and scan pages out of indexes.
+User-agent: *
+Disallow: /admin
+Disallow: /v/
+Disallow: /api/
+Disallow: /media/
