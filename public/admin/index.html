@@ -28,7 +28,6 @@
 <div id="app-view" class="hidden">
   <header class="topbar">
     <div class="brand"><div class="mark" id="brand-mark">ID</div><span id="brand-name">QR ID</span></div>
-    <span class="org" id="brand-org"></span>
     <nav class="tabs">
       <button data-tab="members" class="active">Members<span class="am">አባላት</span></button>
       <button data-tab="settings">Card &amp; Organization<span class="am">ካርድና ድርጅት</span></button>
@@ -47,8 +46,6 @@
 
     <!-- ------------------------- members tab ------------------------ -->
     <section id="tab-members">
-      <div class="stats" id="stats"></div>
-
       <div class="toolbar-row">
         <input type="search" id="search" class="grow" placeholder="Search name, member no., phone…">
         <select id="status-filter" style="width:auto">
@@ -57,8 +54,8 @@
           <option value="revoked">Revoked only</option>
         </select>
         <button class="btn primary" id="add-btn">+ Add new member<span class="am">አዲስ አባል</span></button>
-        <a class="btn" href="/admin/sheet?status=active" target="_blank" rel="noopener">Print all QR sheets<span class="am">ሁሉንም አትም</span></a>
-        <a class="btn" href="/api/export.csv">Export CSV<span class="am">CSV ላክ</span></a>
+        <a class="btn small" href="/admin/sheet?status=active" target="_blank" rel="noopener">Print all QR sheets<span class="am">ሁሉንም አትም</span></a>
+        <a class="btn small" href="/api/export.csv">Export CSV<span class="am">CSV ላክ</span></a>
       </div>
 
       <div class="members-grid" id="members-grid"></div>
@@ -275,18 +272,13 @@
               <div class="code hidden" id="qr-code"></div>
               <div class="url hidden" id="qr-url"></div>
             </div>
+            <div class="scan-line" id="scan-line"></div>
             <div class="btn-row" style="margin-top:12px" id="qr-actions">
               <button type="button" class="btn small primary" id="print-card" disabled>Print card back<span class="am">አትም</span></button>
               <button type="button" class="btn small" id="dl-qr" disabled>Download PNG</button>
               <button type="button" class="btn small" id="print-sheet" disabled>Print A4 sheet</button>
               <button type="button" class="btn small" id="copy-link" disabled>Copy link</button>
             </div>
-          </div>
-
-          <div class="side-card">
-            <h3>Scan history<span class="am">የቃኝ ታሪክ</span></h3>
-            <p class="sub"><span id="scan-total">0</span> scan(s)</p>
-            <ul class="scans" id="scans-list"><li class="empty-line">Not saved yet.</li></ul>
           </div>
 
           <div class="side-card hidden" id="danger-card" style="margin-top:14px">

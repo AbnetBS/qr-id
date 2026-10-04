@@ -207,7 +207,7 @@ function showApp() {
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
   applySettings(state.settings);
-  $('#who').textContent = state.admin ? `${state.admin.full_name || state.admin.username} (@${state.admin.username})` : '';
+  $('#who').textContent = state.admin ? (state.admin.full_name || state.admin.username) : '';
   $('#default-pass-banner').classList.toggle('hidden', !state.defaultPassword);
   // New-tab links (print sheets, CSV) must work even if the cookie is blocked.
   $$('a[href^="/api/"], a[href^="/admin/"]').forEach((a) => { a.href = withToken(a.getAttribute('href')); });
@@ -220,7 +220,6 @@ function applySettings(settings) {
   document.documentElement.style.setProperty('--brand', settings.theme_color || '#0b5d3b');
   $('#brand-name').textContent = settings.org_name || 'QR ID';
   $('#brand-mark').textContent = (settings.org_name || 'ID').trim().charAt(0).toUpperCase() || 'I';
-  $('#brand-org').textContent = settings.org_tagline || '';
   fillSettingsForm(settings);
 }
 
@@ -242,31 +241,12 @@ async function loadMembers() {
   if (state.query) params.set('q', state.query);
   if (state.status) params.set('status', state.status);
   try {
-    const [list, stats] = await Promise.all([
-      api(`/api/members?${params.toString()}`),
-      api('/api/stats'),
-    ]);
+    const list = await api(`/api/members?${params.toString()}`);
     state.members = list.members;
-    renderStats(stats);
     renderMembers();
   } catch (err) {
     toast(err.message, 'err');
   }
-}
-
-function renderStats(s) {
-  const cards = [
-    ['Members', 'አባላት', s.total],
-    ['Active cards', 'ንቁ ካርዶች', s.active],
-    ['Revoked', 'የተሰረዙ', s.revoked],
-    ['QR scans (total)', 'ጠቅላላ ቃኝ', s.scans],
-    ['Scans today', 'ዛሬ', s.scans_today],
-    ['Next member no.', 'ቀጣይ ቁጥር', s.next_member_no],
-  ];
-  $('#stats').innerHTML = cards
-    .map(([label, am, value]) =>
-      `<div class="stat"><div class="n">${esc(value)}</div><div class="l">${esc(label)}<span class="am">${esc(am)}</span></div></div>`)
-    .join('');
 }
 
 function renderMembers() {
@@ -290,7 +270,6 @@ function memberCardHtml(m) {
     <div class="info">
       <div class="name">${esc(m.full_name)}</div>
       <div class="meta">${esc(m.member_no)}</div>
-      ${m.role ? `<div class="role">${esc(m.role)}</div>` : ''}
       <div class="acts">
         <button class="btn small" data-edit="${m.id}">Edit / QR</button>
         <button class="btn small danger" data-del="${m.id}" title="Delete member">Delete</button>
@@ -328,8 +307,7 @@ function resetMemberForm() {
   $('#qr-placeholder').classList.remove('hidden');
   $('#qr-code').classList.add('hidden');
   $('#qr-url').classList.add('hidden');
-  $('#scan-total').textContent = '0';
-  $('#scans-list').innerHTML = '<li class="empty-line">Not saved yet.</li>';
+  $('#scan-line').textContent = '';
   ['#print-card', '#dl-qr', '#print-sheet', '#copy-link'].forEach((s) => ($(s).disabled = true));
 }
 
@@ -339,14 +317,14 @@ function openMemberModal(id) {
   $('#member-modal').classList.remove('hidden');
   if (!id) return;
   api(`/api/members/${id}`)
-    .then(({ member, scans }) => {
-      showMember(member, scans);
+    .then(({ member }) => {
+      showMember(member);
       $('#modal-title').textContent = `Edit — ${member.full_name}`;
     })
     .catch((err) => toast(err.message, 'err'));
 }
 
-function showMember(m, scans = []) {
+function showMember(m) {
   state.editing = m.id;
   state.photoData = null;
   state.photoRemoved = false;
@@ -373,24 +351,11 @@ function showMember(m, scans = []) {
     ['#print-card', '#dl-qr', '#print-sheet', '#copy-link'].forEach((s) => ($(s).disabled = false));
   }
 
-  $('#scan-total').textContent = m.scan_count ?? 0;
-  renderScans(scans);
-}
-
-function renderScans(scans) {
-  if (!scans || !scans.length) {
-    $('#scans-list').innerHTML = '<li class="empty-line">No scans yet.</li>';
-    return;
-  }
-  $('#scans-list').innerHTML = scans
-    .map((s) => {
-      const ua = String(s.user_agent || '');
-      const device = /android/i.test(ua) ? 'Android' : /iphone|ipad|ios/i.test(ua) ? 'iPhone/iPad'
-        : /windows/i.test(ua) ? 'Windows' : /mac os/i.test(ua) ? 'Mac' : 'Device';
-      const result = s.result === 'valid' ? '' : ` · ${esc(s.result)}`;
-      return `<li><span class="when">${esc(fmtDateTime(s.scanned_at))}</span><span class="ua">${esc(device)}${result}</span></li>`;
-    })
-    .join('');
+  const count = Number(m.scan_count) || 0;
+  const last = m.last_scan && m.last_scan.scanned_at ? fmtDateTime(m.last_scan.scanned_at) : '';
+  $('#scan-line').textContent = count
+    ? `${count} scan${count === 1 ? '' : 's'}${last ? ` · last ${last}` : ''}`
+    : 'No scans yet.';
 }
 
 function setPhotoPreview(url) {
@@ -433,7 +398,7 @@ async function saveMember(event) {
     let result;
     if (state.editing) result = await api(`/api/members/${state.editing}`, { method: 'PUT', body: payload });
     else result = await api('/api/members', { method: 'POST', body: payload });
-    showMember(result.member, []);
+    showMember(result.member);
     await loadMembers();
     toast(state.editing ? 'Member saved' : `Member created — ${result.member.member_no}`, 'ok');
   } catch (err) {
@@ -451,7 +416,7 @@ async function deleteMember(id) {
   const name = member ? member.full_name : 'this member';
   const ok = await confirmDialog(
     'Delete member',
-    `Delete ${name} permanently? The ID card will stop working and the record cannot be recovered.`,
+    `Delete ${name} permanently? The card stops working and the record cannot be recovered.`,
     'Delete'
   );
   if (!ok) return;
@@ -472,14 +437,14 @@ async function toggleRevoke() {
   if (next === 'revoked') {
     const ok = await confirmDialog(
       'Revoke card',
-      'The printed QR will immediately show "card revoked". You can restore it later.',
+      'The card will show as revoked immediately. You can restore it later.',
       'Revoke card'
     );
     if (!ok) return;
   }
   try {
     const { member } = await api(`/api/members/${state.editing}/${next === 'revoked' ? 'revoke' : 'activate'}`, { method: 'POST' });
-    showMember(member, await loadScans(member.id));
+    showMember(member);
     await loadMembers();
     toast(next === 'revoked' ? 'Card revoked' : 'Card restored', 'ok');
   } catch (err) {
@@ -491,26 +456,17 @@ async function reissueQr() {
   if (!state.editing) return;
   const ok = await confirmDialog(
     'Reissue QR code',
-    'A brand-new QR code is generated. Every previously printed or photographed copy stops working instantly. Only do this when a card is lost, or after printing the new card.',
+    'A new QR is generated and every printed copy of the old one stops working.',
     'Reissue QR'
   );
   if (!ok) return;
   try {
     const { member } = await api(`/api/members/${state.editing}/reissue`, { method: 'POST' });
-    showMember(member, []);
+    showMember(member);
     await loadMembers();
     toast('New QR code created — old copies are now invalid', 'ok');
   } catch (err) {
     toast(err.message, 'err');
-  }
-}
-
-async function loadScans(id) {
-  try {
-    const { scans } = await api(`/api/members/${id}/scans`);
-    return scans;
-  } catch {
-    return [];
   }
 }
 
