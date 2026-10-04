@@ -53,15 +53,50 @@ function brandHead(settings) {
     </div>`;
 }
 
+/** Amharic wording shown under each English label. */
+const AM = {
+  'Member number': 'የአባል መለያ ቁጥር',
+  'Verification code': 'የማረጋገጫ ኮድ',
+  'Member since': 'አባል ከሆነበት',
+  'Valid until': 'የሚያበቃበት',
+  Organization: 'ድርጅት',
+  'Department / Branch': 'ክፍል / ቅርንጫፍ',
+  'National ID no.': 'የብሔራዊ መታወቂያ ቁጥር',
+  'Membership type': 'የአባልነት ዓይነት',
+  'Marital status': 'የጋብቻ ሁኔታ',
+  Education: 'የትምህርት ደረጃ',
+  Occupation: 'ሙያ',
+  'Emergency contact': 'የአደጋ ጊዜ ተጠሪ',
+  'Emergency phone': 'የአደጋ ጊዜ ስልክ',
+  'Zone / City': 'ዞን / ከተማ',
+  Woreda: 'ወረዳ',
+  Kebele: 'ቀበሌ',
+  'House no.': 'የቤት ቁጥር',
+  Phone: 'ስልክ',
+  'Alternate phone': 'ተጨማሪ ስልክ',
+  Email: 'ኢሜይል',
+  Region: 'ክልል',
+  Address: 'አድራሻ',
+  Sex: 'ጾታ',
+  'Date of birth': 'የትውልድ ቀን',
+  'Blood type': 'የደም ዓይነት',
+  'Card valid until': 'የካርድ ማብቂያ',
+  'Registered on': 'የተመዘገበበት',
+};
+
+/** English label with its Amharic line underneath. */
+const lab = (label) =>
+  `${esc(label)}${AM[label] ? `<span class="am">${esc(AM[label])}</span>` : ''}`;
+
 const field = (label, value) =>
-  value ? `<div class="field"><div class="k">${esc(label)}</div><div class="v">${esc(value)}</div></div>` : '';
+  value ? `<div class="field"><div class="k">${lab(label)}</div><div class="v">${esc(value)}</div></div>` : '';
 
 const chip = (label, value) =>
-  value ? `<div class="id-chip"><div class="k">${esc(label)}</div><div class="v">${esc(value)}</div></div>` : '';
+  value ? `<div class="id-chip"><div class="k">${lab(label)}</div><div class="v">${esc(value)}</div></div>` : '';
 
 /* ------------------------- public verify page ----------------------- */
 
-function publicView({ member, settings, verifyUrl, scans }) {
+function publicView({ member, settings, verifyUrl }) {
   const revoked = member.status !== 'active';
   const code = verifyCode(member.token);
   const photo = member.photo_path
@@ -80,7 +115,7 @@ function publicView({ member, settings, verifyUrl, scans }) {
           ${member.full_name_alt ? `<div class="person-alt">${esc(member.full_name_alt)}</div>` : ''}
           ${member.role ? `<div class="person-role">${esc(member.role)}${member.department ? ` &middot; ${esc(member.department)}` : ''}</div>` : (member.department ? `<div class="person-role">${esc(member.department)}</div>` : '')}
           <div class="badges">
-            <span class="badge ${revoked ? 'bad' : 'ok'}">${revoked ? 'Revoked' : 'Active member'}</span>
+            <span class="badge ${revoked ? 'bad' : 'ok'}">${revoked ? 'Revoked<span class="am">የተሰረዘ</span>' : 'Active member<span class="am">ንቁ አባል</span>'}</span>
             ${member.region ? `<span class="badge info">${esc(member.region)}</span>` : ''}
           </div>
         </div>
@@ -95,15 +130,26 @@ function publicView({ member, settings, verifyUrl, scans }) {
 
       <div class="fields">
         ${field('Organization', settings.org_name)}
+        ${field('Membership type', member.membership_type)}
         ${field('Department / Branch', member.department)}
-        ${field('Phone', member.phone)}
-        ${field('Alternate phone', member.phone_alt)}
-        ${field('Email', member.email)}
-        ${field('Region', member.region)}
-        ${field('Address', member.address)}
+        ${field('National ID no.', member.national_id)}
         ${field('Sex', member.sex)}
         ${field('Date of birth', formatDate(member.dob))}
+        ${field('Marital status', member.marital_status)}
+        ${field('Education', member.education)}
+        ${field('Occupation', member.occupation)}
         ${field('Blood type', member.blood_type)}
+        ${field('Phone', member.phone)}
+        ${field('Alternate phone', member.phone_alt)}
+        ${field('Emergency contact', member.emergency_contact)}
+        ${field('Emergency phone', member.emergency_phone)}
+        ${field('Email', member.email)}
+        ${field('Region', member.region)}
+        ${field('Zone / City', member.zone_city)}
+        ${field('Woreda', member.woreda)}
+        ${field('Kebele', member.kebele)}
+        ${field('House no.', member.house_no)}
+        ${field('Address', member.address)}
         ${field('Card valid until', formatDate(member.expiry_date))}
         ${field('Registered on', formatDate(member.created_at))}
       </div>
@@ -112,13 +158,12 @@ function publicView({ member, settings, verifyUrl, scans }) {
 
       <div class="verified">
         <span class="dot"></span>
-        <span>Live record from ${esc(settings.org_name)} &middot; verified ${esc(formatDateTime(new Date().toISOString()))} &middot; ${Number(scans) || 0} scan${Number(scans) === 1 ? '' : 's'} on record</span>
+        <span>Verified ${esc(formatDateTime(new Date().toISOString()))}</span>
       </div>
     </div>
   </div>
   <div class="foot">
-    ${esc(settings.footer_note)}<br>
-    This information is published by the issuing organization. If it does not match the card you were shown, contact the organization.
+    ${esc(settings.footer_note)}
   </div>
 </div>`;
 
@@ -132,12 +177,10 @@ function invalidView({ settings, token }) {
 <div class="page" style="--brand:${esc(settings.theme_color)}">
   <div class="state-card">
     <div class="icon">&#128269;</div>
-    <h1>ID not recognised</h1>
-    <p>This QR code does not match any record in the ${esc(settings.org_name)} register.
-       The card may be old, altered, or not issued by us.</p>
+    <h1>ID not recognised<span class="am">መታወቂያው አልታወቀም</span></h1>
+    <p>This QR code is not in the ${esc(settings.org_name)} register.</p>
     <p class="ref">ref: ${esc(String(token || '').slice(0, 12))}</p>
   </div>
-  <div class="foot">${esc(settings.footer_note)}</div>
 </div>`;
   return shell({ title: 'ID not recognised', body });
 }
@@ -147,12 +190,10 @@ function revokedView({ member, settings }) {
 <div class="page" style="--brand:${esc(settings.theme_color)}">
   <div class="state-card">
     <div class="icon">&#9888;&#65039;</div>
-    <h1>Card revoked / not valid</h1>
-    <p>Member number <b>${esc(member.member_no)}</b> has been revoked by ${esc(settings.org_name)}.
-       This card must no longer be accepted.</p>
-    <p>The record was withdrawn on ${esc(formatDateTime(member.revoked_at))}.</p>
+    <h1>Card revoked<span class="am">ካርዱ ተሰርዟል</span></h1>
+    <p>Member number <b>${esc(member.member_no)}</b> was revoked by ${esc(settings.org_name)}
+       on ${esc(formatDateTime(member.revoked_at))}. Do not accept this card.</p>
   </div>
-  <div class="foot">${esc(settings.footer_note)}</div>
 </div>`;
   return shell({ title: 'Card revoked', body });
 }
@@ -208,9 +249,8 @@ async function printPage({ member, settings, verifyUrl, sessionToken = '' }) {
   <a href="/admin/${esc(q)}">&larr; Back to admin</a>
 </div>
 <div class="card-sheet">${card}</div>
-<p class="no-print" style="text-align:center;font:13px -apple-system,Segoe UI,Roboto,sans-serif;color:#5b6474;max-width:640px;margin:0 auto">
-  Printed at true ID-card size (85.6 &times; 54 mm). In the print dialog choose <b>A4</b>, <b>scale 100%</b> and
-  turn <b>headers/footers off</b>. Print on the reverse of the card, or on a sticker to attach to it.
+<p class="no-print" style="text-align:center;font:12px -apple-system,Segoe UI,Roboto,sans-serif;color:#5b6474;max-width:640px;margin:0 auto">
+  A4 &middot; scale 100% &middot; headers/footers off
 </p>`;
   return shell({ title: `Card back — ${member.full_name}`, body });
 }
@@ -243,8 +283,8 @@ async function sheetPage({ members, settings, urlFor, sessionToken = '' }) {
   <a href="/admin/${sessionToken ? `?t=${encodeURIComponent(sessionToken)}` : ''}">&larr; Back to admin</a>
 </div>
 ${rendered.join('\n')}
-<p class="no-print" style="text-align:center;font:13px -apple-system,Segoe UI,Roboto,sans-serif;color:#5b6474;margin:0 0 40px">
-  A4 sheets, 2 &times; 4 cards per page, true ID-card size. Dashed lines are cutting guides. Print at 100% scale.
+<p class="no-print" style="text-align:center;font:12px -apple-system,Segoe UI,Roboto,sans-serif;color:#5b6474;margin:0 0 40px">
+  A4 &middot; scale 100% &middot; headers/footers off
 </p>`;
 
   return shell({ title: 'Printable QR sheets', body });

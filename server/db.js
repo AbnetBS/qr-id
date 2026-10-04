@@ -20,6 +20,17 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'qrid.db'));
 db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
+// Tuned for small hosts: fewer fsyncs, no temp files on disk, wait instead of
+// failing when another connection holds the write lock.
+db.exec('PRAGMA synchronous = NORMAL;');
+db.exec('PRAGMA temp_store = MEMORY;');
+db.exec('PRAGMA busy_timeout = 5000;');
+
+/** Add a column to an existing table without touching existing data. */
+function ensureColumn(table, column, definition) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+}
 
 /* ------------------------------------------------------------------ *
  * Schema
@@ -67,9 +78,19 @@ CREATE TABLE IF NOT EXISTS members (
   dob          TEXT NOT NULL DEFAULT '',
   phone        TEXT NOT NULL DEFAULT '',
   phone_alt    TEXT NOT NULL DEFAULT '',
-  email        TEXT NOT NULL DEFAULT '',
-  region       TEXT NOT NULL DEFAULT '',
-  address      TEXT NOT NULL DEFAULT '',
+  email          TEXT NOT NULL DEFAULT '',
+  national_id    TEXT NOT NULL DEFAULT '',
+  region         TEXT NOT NULL DEFAULT '',
+  zone_city      TEXT NOT NULL DEFAULT '',
+  woreda         TEXT NOT NULL DEFAULT '',
+  kebele         TEXT NOT NULL DEFAULT '',
+  house_no       TEXT NOT NULL DEFAULT '',
+  address        TEXT NOT NULL DEFAULT '',
+  marital_status TEXT NOT NULL DEFAULT '',
+  education      TEXT NOT NULL DEFAULT '',
+  occupation     TEXT NOT NULL DEFAULT '',
+  emergency_contact TEXT NOT NULL DEFAULT '',
+  emergency_phone   TEXT NOT NULL DEFAULT '',
   role         TEXT NOT NULL DEFAULT '',
   department   TEXT NOT NULL DEFAULT '',
   joined_date  TEXT NOT NULL DEFAULT '',
@@ -141,6 +162,18 @@ if (!settingsRow) {
   db.prepare('INSERT INTO settings (id) VALUES (1)').run();
 }
 
+// 0 = the seeded admin password has never been changed.
+ensureColumn('settings', 'pw_changed', 'pw_changed INTEGER NOT NULL DEFAULT 0');
+
+/* Columns added after the first release. Existing databases get them with a
+   plain ALTER TABLE, so a deployed register keeps all of its data. */
+for (const column of [
+  'national_id', 'zone_city', 'woreda', 'kebele', 'house_no', 'membership_type',
+  'marital_status', 'education', 'occupation', 'emergency_contact', 'emergency_phone',
+]) {
+  ensureColumn('members', column, `${column} TEXT NOT NULL DEFAULT ''`);
+}
+
 /**
  * Create the first admin account (admin / admin123) when the register is empty.
  * `auth` is required lazily on purpose: auth.js imports this module, so requiring
@@ -163,7 +196,17 @@ function seedDefaultAdmin() {
  * Helpers
  * ------------------------------------------------------------------ */
 
-const getSettings = () => db.prepare('SELECT * FROM settings WHERE id = 1').get();
+/* Settings are read on almost every request. They change at most a few times a
+   year, so keep one copy in memory instead of hitting SQLite every time. */
+let settingsCache = null;
+
+const readSettings = () => db.prepare('SELECT * FROM settings WHERE id = 1').get();
+
+/** Cached settings row. Treat it as read-only. */
+function getSettings() {
+  if (!settingsCache) settingsCache = readSettings();
+  return settingsCache;
+}
 
 function updateSettings(patch) {
   const allowed = Object.keys(DEFAULTS);
@@ -171,8 +214,16 @@ function updateSettings(patch) {
   if (fields.length) {
     const sql = `UPDATE settings SET ${fields.map((f) => `${f} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = 1`;
     db.prepare(sql).run(...fields.map((f) => String(patch[f] ?? '')));
+    settingsCache = readSettings();
   }
   return getSettings();
+}
+
+/** Set a raw settings column (used for flags that are not admin-editable). */
+function setFlag(column, value) {
+  db.prepare(`UPDATE settings SET ${column} = ? WHERE id = 1`).run(value);
+  settingsCache = readSettings();
+  return settingsCache;
 }
 
 /** Next sequential member number, e.g. MBR-2026-0007 */
@@ -191,14 +242,31 @@ function nextMemberNo() {
   return `${prefix}-${year}-${String(max + 1).padStart(4, '0')}`;
 }
 
+/* ------------------------------------------------------------------ *
+ * Housekeeping (storage control for small hosts)
+ * ------------------------------------------------------------------ */
+
+/** Drop scan-log rows older than SCAN_RETENTION_DAYS (0 = keep forever). */
+function pruneScans() {
+  const days = Number(process.env.SCAN_RETENTION_DAYS || 0);
+  if (!Number.isFinite(days) || days <= 0) return 0;
+  const info = db
+    .prepare("DELETE FROM scans WHERE scanned_at < datetime('now', ?)")
+    .run(`-${Math.floor(days)} days`);
+  return Number(info.changes || 0);
+}
+
 module.exports = {
   db,
   DATA_DIR,
   UPLOAD_DIR,
   SECRET,
   DEFAULTS,
+  ensureColumn,
   getSettings,
   updateSettings,
+  setFlag,
   nextMemberNo,
   seedDefaultAdmin,
+  pruneScans,
 };

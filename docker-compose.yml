@@ -1,0 +1,35 @@
+# For Coolify / Portainer / plain "docker compose up -d" on a VPS.
+#
+# The app is idle between scans: it has no timers, no polling and no cron, so it
+# uses 0% CPU until a request arrives (~65 MB RAM at rest). The memory limit and
+# the heap cap below keep it from ever crowding whatever else runs on the box.
+
+services:
+  qr-id:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      DATA_DIR: /app/data
+      # Days an admin stays signed in while inactive (renews on activity).
+      SESSION_DAYS: "30"
+      # Write nothing to disk when a card is scanned (scan log off).
+      # SCAN_LOG: "0"
+      # Auto-delete scan-log rows older than this many days (0 = keep forever).
+      # SCAN_RETENTION_DAYS: "365"
+      # Keep the Node heap small so the container stays light.
+      NODE_OPTIONS: "--max-old-space-size=128"
+    volumes:
+      - qrid-data:/app/data
+    healthcheck:
+      # Every 5 minutes only - it is a liveness probe, not a keep-awake.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null || exit 1"]
+      interval: 300s
+      timeout: 5s
+      retries: 2
+      start_period: 20s
+    mem_limit: 256m
+
+volumes:
+  qrid-data:
