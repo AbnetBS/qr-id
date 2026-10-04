@@ -180,6 +180,14 @@ const getScans = (memberId, limit = 25) =>
 const scanCount = (memberId) =>
   Number(db.prepare('SELECT COUNT(*) AS n FROM scans WHERE member_id = ?').get(Number(memberId)).n);
 
+/** Scan counts for many members in one query (avoids N+1 in the member list). */
+function scanCounts() {
+  const rows = db.prepare('SELECT member_id, COUNT(*) AS n FROM scans GROUP BY member_id').all();
+  const out = new Map();
+  for (const r of rows) out.set(Number(r.member_id), Number(r.n));
+  return out;
+}
+
 const lastScan = (memberId) =>
   db.prepare('SELECT * FROM scans WHERE member_id = ? ORDER BY id DESC LIMIT 1').get(Number(memberId)) || null;
 
@@ -240,6 +248,7 @@ module.exports = {
   logScan,
   getScans,
   scanCount,
+  scanCounts,
   lastScan,
   stats,
   toAdminJson,

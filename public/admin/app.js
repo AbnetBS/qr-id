@@ -17,14 +17,23 @@ const state = {
 };
 
 /* The session normally travels in an HttpOnly cookie. Browsers that block
-   third-party cookies (for example when this page is embedded elsewhere) drop
-   it, so the login response also gives us a token which we keep here and send
-   as an Authorization header. It is adopted from a ?t= link on load. */
+   third-party cookies (for example when this page is inside an embedded frame)
+   drop that cookie, so the login response also gives us a token which we send
+   as an Authorization header.
+
+   The token is kept in sessionStorage, not only in memory: without it a reload
+   (or opening a print link in a new tab) would lose the session wherever the
+   cookie is blocked. sessionStorage is cleared when the tab is closed. */
+const TOKEN_KEY = 'qrid_token';
+
 try {
-  const t = new URLSearchParams(location.search).get('t');
+  const t = new URLSearchParams(location.search).get('t') || sessionStorage.getItem(TOKEN_KEY) || '';
   if (t) {
     state.token = t;
-    history.replaceState(null, '', location.pathname);
+    sessionStorage.setItem(TOKEN_KEY, t);
+    if (new URLSearchParams(location.search).get('t')) {
+      history.replaceState(null, '', location.pathname);
+    }
   }
 } catch { /* ignore */ }
 
@@ -60,11 +69,26 @@ async function api(path, { method = 'GET', body } = {}) {
   try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
 
   if (res.status === 401 && path !== '/api/login') {
-    showLogin();
-    throw new Error('Your session expired — please sign in again.');
+    // Genuinely signed out (idle for longer than the session window, server
+    // restarted on a host with a fresh database, or credentials revoked).
+    signOut('Your session ended. Please sign in again.');
+    throw new Error('Your session ended. Please sign in again.');
+  }
+  if (res.status === 403 && path !== '/api/login') {
+    signOut('Session invalid. Please sign in again.');
+    throw new Error('Session invalid. Please sign in again.');
   }
   if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
   return data;
+}
+
+/** Drop the session everywhere and show the login screen with a reason. */
+function signOut(message) {
+  state.csrf = null;
+  state.token = null;
+  state.admin = null;
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+  showLogin(message);
 }
 
 let toastTimer = 0;
@@ -148,14 +172,34 @@ async function boot() {
     state.defaultPassword = !!me.default_password;
     showApp();
   } catch {
-    showLogin();
+    // A 401/403 already sent us to the login screen with a reason — keep it.
+    if ($('#login-view').classList.contains('hidden')) showLogin();
   }
 }
 
-function showLogin() {
+/** Amharic wording for the messages the login screen can show. */
+const AM_ERRORS = [
+  ['Wrong username or password', 'የተጠቃሚ ስም ወይም የይለፍ ቃል ተሳስቷል'],
+  ['Too many failed attempts', 'ብዙ ሙከራዎች። ከጥቂት ደቂቃዎች በኋላ ይሞክሩ።'],
+  ['Your session ended', 'ክፍለ ጊዜው አልቋል። እባክዎ እንደገና ይግቡ።'],
+  ['Session invalid', 'ክፍለ ጊዜው ልክ አይደለም። እባክዎ እንደገና ይግቡ።'],
+];
+
+function setLoginError(message) {
+  const box = $('#login-error');
+  if (!box) return;
+  const text = String(message || '').trim();
+  box.classList.toggle('hidden', !text);
+  const am = text && AM_ERRORS.find(([en]) => text.startsWith(en));
+  box.innerHTML = text ? `${esc(text)}${am ? `<span class="am">${esc(am[1])}</span>` : ''}` : '';
+}
+
+function showLogin(message = '') {
   $('#app-view').classList.add('hidden');
   $('#login-view').classList.remove('hidden');
   $('#member-modal').classList.add('hidden');
+  $('#confirm-modal').classList.add('hidden');
+  setLoginError(message);
   setTimeout(() => $('#login-user').focus(), 30);
 }
 
@@ -177,9 +221,6 @@ function applySettings(settings) {
   $('#brand-name').textContent = settings.org_name || 'QR ID';
   $('#brand-mark').textContent = (settings.org_name || 'ID').trim().charAt(0).toUpperCase() || 'I';
   $('#brand-org').textContent = settings.org_tagline || '';
-  $('#login-mark').textContent = (settings.org_name || 'ID').trim().charAt(0).toUpperCase() || 'I';
-  $('#login-sub').textContent = `${settings.org_name || 'Member ID'} · QR management`;
-  $('#s_base_effective').textContent = settings.effective_base_url || '';
   fillSettingsForm(settings);
 }
 
@@ -215,15 +256,16 @@ async function loadMembers() {
 
 function renderStats(s) {
   const cards = [
-    ['Members', s.total],
-    ['Active cards', s.active],
-    ['Revoked', s.revoked],
-    ['QR scans (total)', s.scans],
-    ['Scans today', s.scans_today],
-    ['Next member no.', s.next_member_no],
+    ['Members', 'አባላት', s.total],
+    ['Active cards', 'ንቁ ካርዶች', s.active],
+    ['Revoked', 'የተሰረዙ', s.revoked],
+    ['QR scans (total)', 'ጠቅላላ ቃኝ', s.scans],
+    ['Scans today', 'ዛሬ', s.scans_today],
+    ['Next member no.', 'ቀጣይ ቁጥር', s.next_member_no],
   ];
   $('#stats').innerHTML = cards
-    .map(([label, value]) => `<div class="stat"><div class="n">${esc(value)}</div><div class="l">${esc(label)}</div></div>`)
+    .map(([label, am, value]) =>
+      `<div class="stat"><div class="n">${esc(value)}</div><div class="l">${esc(label)}<span class="am">${esc(am)}</span></div></div>`)
     .join('');
 }
 
@@ -234,7 +276,7 @@ function renderMembers() {
   empty.classList.toggle('hidden', state.members.length > 0);
   $('#empty-text').innerHTML = state.query || state.status
     ? 'No member matches that search.'
-    : 'No members yet. Click <b>Add new member</b> to create the first ID card.';
+    : 'No members yet.';
 }
 
 function memberCardHtml(m) {
@@ -277,12 +319,11 @@ function resetMemberForm() {
   $('#modal-title').textContent = 'Add new member';
   $('#member-delete').classList.add('hidden');
   $('#danger-card').classList.add('hidden');
-  $('#member-save').textContent = 'Save member';
+  $('#member-save').innerHTML = 'Save member<span class="am">አስቀምጥ</span>';
   $('#qr-img').classList.add('hidden');
   $('#qr-placeholder').classList.remove('hidden');
   $('#qr-code').classList.add('hidden');
   $('#qr-url').classList.add('hidden');
-  $('#qr-sub').textContent = 'Save the member first — the QR code is generated automatically.';
   $('#scan-total').textContent = '0';
   $('#scans-list').innerHTML = '<li class="empty-line">Not saved yet.</li>';
   ['#print-card', '#dl-qr', '#print-sheet', '#copy-link'].forEach((s) => ($(s).disabled = true));
@@ -325,7 +366,6 @@ function showMember(m, scans = []) {
     $('#qr-code').classList.remove('hidden');
     $('#qr-url').textContent = m.public_url;
     $('#qr-url').classList.remove('hidden');
-    $('#qr-sub').textContent = 'Print this on the back of the ID card. It always shows the live record.';
     ['#print-card', '#dl-qr', '#print-sheet', '#copy-link'].forEach((s) => ($(s).disabled = false));
   }
 
@@ -382,7 +422,7 @@ async function saveMember(event) {
   else if (state.photoRemoved) payload.photo_path = null;
 
   const button = $('#member-save');
-  const original = button.textContent;
+  const original = button.innerHTML;
   button.disabled = true;
   button.innerHTML = '<span class="spin"></span> Saving…';
   try {
@@ -396,7 +436,7 @@ async function saveMember(event) {
     toast(err.message, 'err');
   } finally {
     button.disabled = false;
-    button.textContent = original;
+    button.innerHTML = original;
   }
 }
 
@@ -485,7 +525,6 @@ function fillSettingsForm(s) {
   $('#s_footer_note').value = s.footer_note || '';
   $('#s_verify_note').value = s.verify_note || '';
   $('#logo-preview').innerHTML = s.logo_url ? `<img src="${esc(s.logo_url)}" alt="logo">` : 'No logo';
-  $('#m_no_hint').textContent = `${(s.id_prefix || 'MBR').toUpperCase()}-${new Date().getFullYear()}-0001`;
 }
 
 async function saveSettings(event) {
@@ -516,8 +555,10 @@ function bindEvents() {
   $('#login-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = $('#login-btn');
+    const original = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<span class="spin"></span>';
+    setLoginError('');
     try {
       const res = await api('/api/login', {
         method: 'POST',
@@ -525,7 +566,10 @@ function bindEvents() {
       });
       state.admin = res.admin;
       state.csrf = res.csrf;
-      if (res.token) state.token = res.token;
+      if (res.token) {
+        state.token = res.token;
+        try { sessionStorage.setItem(TOKEN_KEY, res.token); } catch { /* ignore */ }
+      }
       state.settings = res.settings;
       state.defaultPassword = false;
       $('#login-pass').value = '';
@@ -533,18 +577,16 @@ function bindEvents() {
       const me = await api('/api/me').catch(() => null);
       if (me) { state.defaultPassword = !!me.default_password; $('#default-pass-banner').classList.toggle('hidden', !state.defaultPassword); }
     } catch (err) {
-      toast(err.message, 'err');
+      setLoginError(err.message);
     } finally {
       button.disabled = false;
-      button.textContent = 'Sign in';
+      button.innerHTML = original;
     }
   });
 
   $('#logout-btn').addEventListener('click', async () => {
     try { await api('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
-    state.csrf = null;
-    state.token = null;
-    showLogin();
+    signOut('');
   });
 
   $$('.topbar .tabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));

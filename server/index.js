@@ -6,10 +6,11 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const zlib = require('node:zlib');
 const express = require('express');
 
 const dbModule = require('./db');
-const { db, getSettings, updateSettings, nextMemberNo, seedDefaultAdmin, UPLOAD_DIR } = dbModule;
+const { db, getSettings, updateSettings, nextMemberNo, seedDefaultAdmin, setFlag, pruneScans, UPLOAD_DIR } = dbModule;
 const auth = require('./auth');
 const createdDefaultAdmin = seedDefaultAdmin();
 const members = require('./members');
@@ -25,8 +26,36 @@ app.set('trust proxy', true);
 app.disable('x-powered-by');
 app.use(express.json({ limit: '8mb' }));
 
+/**
+ * gzip for dynamic responses (verification pages, print sheets, JSON lists).
+ * Cut the bytes on every scan: a 4 KB page leaves as ~1.5 KB.
+ */
+app.use((req, res, next) => {
+  if (!/\bgzip\b/.test(req.get('accept-encoding') || '')) return next();
+  const send = res.send.bind(res);
+  res.send = function compress(body) {
+    // Express only decides the Content-Type inside send(), so set it here the
+    // same way (a plain string is HTML) before looking at it.
+    if (typeof body === 'string' && !res.get('Content-Type')) res.type('html');
+    if (typeof body === 'string' || Buffer.isBuffer(body)) {
+      const type = String(res.get('Content-Type') || '');
+      const buf = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+      if (buf.length >= 700 && !res.get('Content-Encoding') && /text|json|javascript|xml|svg/i.test(type)) {
+        res.set('Content-Encoding', 'gzip');
+        res.set('Vary', 'Accept-Encoding');
+        res.removeHeader('Content-Length');
+        return res.end(zlib.gzipSync(buf, { level: 6 }));
+      }
+    }
+    return send(body);
+  };
+  next();
+});
+
 auth.cleanupSessions();
 setInterval(auth.cleanupSessions, 60 * 60 * 1000).unref?.();
+pruneScans();
+setInterval(() => { try { pruneScans(); } catch (_) { /* never fatal */ } }, 6 * 60 * 60 * 1000).unref?.();
 
 /* ---------------------------------------------------------------- *
  * Helpers
@@ -69,25 +98,18 @@ function requireIdParam(req, res) {
   return id;
 }
 
-const sameOrigin = (req) => {
-  const origin = req.get('origin');
-  if (!origin) return true;
-  try {
-    const originHost = new URL(origin).host;
-    return originHost === req.get('host') || originHost.endsWith('.e2b.app');
-  } catch {
-    return false;
-  }
-};
-
 /* ---------------------------------------------------------------- *
  * Auth API
  * ---------------------------------------------------------------- */
 
 app.post('/api/login', (req, res) => {
   const ip = req.ip || 'unknown';
-  if (!auth.loginAllowed(ip)) {
-    return res.status(429).json({ error: 'Too many failed attempts. Try again in a few minutes.' });
+  const waitMs = auth.lockoutRemaining(ip);
+  if (waitMs > 0) {
+    const minutes = Math.max(1, Math.ceil(waitMs / 60000));
+    return res.status(429).json({
+      error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+    });
   }
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
@@ -121,14 +143,16 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', (req, res) => {
-  const session = auth.currentSession(req);
+  const session = auth.touchSession(req, res, auth.currentSession(req));
   if (!session) return res.status(401).json({ error: 'Not signed in' });
+  const settings = getSettings();
   res.json({
     admin: session.admin,
     token: session.token,
     csrf: session.csrf,
-    settings: settingsJson(getSettings(), req),
-    default_password: !!createdDefaultAdmin,
+    settings: settingsJson(settings, req),
+    // True until the seeded admin password is changed (survives restarts).
+    default_password: Number(settings.pw_changed) !== 1,
   });
 });
 
@@ -142,6 +166,7 @@ app.post('/api/password', auth.requireAuth, auth.requireCsrf, (req, res) => {
   }
   db.prepare('UPDATE admins SET password_hash = ? WHERE id = ?').run(auth.hashPassword(next), admin.id);
   db.prepare('DELETE FROM sessions WHERE admin_id = ? AND token <> ?').run(admin.id, req.session.token);
+  setFlag('pw_changed', 1);
   res.json({ ok: true });
 });
 
@@ -155,10 +180,11 @@ app.get('/api/stats', auth.requireAuth, (req, res) => {
 
 app.get('/api/members', auth.requireAuth, (req, res) => {
   const rows = members.listMembers({ q: req.query.q || '', status: req.query.status || '' });
+  const counts = members.scanCounts();
   res.json({
     members: rows.map((m) => ({
       ...members.toAdminJson(m),
-      scan_count: members.scanCount(m.id),
+      scan_count: counts.get(m.id) || 0,
     })),
   });
 });
@@ -327,7 +353,6 @@ app.get('/v/:token', (req, res) => {
       member,
       settings,
       verifyUrl: qr.publicUrl(req, settings, member.token),
-      scans: members.scanCount(member.id),
     })
   );
 });
@@ -389,16 +414,87 @@ app.get('/admin/sheet', auth.requireAuthPage, async (req, res) => {
  * Static files + errors
  * ---------------------------------------------------------------- */
 
-app.use(
-  express.static(path.join(__dirname, '..', 'public'), {
-    extensions: ['html'],
-    setHeaders(res, filePath) {
-      // The panel is a small SPA plus a CSS file: force revalidation so a
-      // redeploy is picked up instead of serving a stale cached app.js.
-      if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
-    },
-  })
-);
+/**
+ * Static files: read once, gzip once, then served from memory with an ETag.
+ * Costs a few hundred KB of RAM and removes all disk I/O (and most of the
+ * bandwidth) for the admin panel and the public CSS.
+ */
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
+  '.woff2': 'font/woff2',
+};
+const staticCache = new Map();
+
+function staticEntry(file) {
+  const st = fs.statSync(file);
+  const cached = staticCache.get(file);
+  if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached;
+  const raw = fs.readFileSync(file);
+  const entry = {
+    mime: MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+    raw,
+    gz: zlib.gzipSync(raw, { level: 9 }),
+    etag: `"${st.size.toString(16)}-${st.mtimeMs.toString(16)}"`,
+    size: st.size,
+    mtimeMs: st.mtimeMs,
+  };
+  staticCache.set(file, entry);
+  return entry;
+}
+
+/** URL path -> file inside public/, or null. Blocks anything outside it. */
+function resolveStaticFile(urlPath) {
+  let rel;
+  try {
+    rel = decodeURIComponent(String(urlPath).split('?')[0]);
+  } catch {
+    return null;
+  }
+  rel = rel.replace(/^\/+/, '');
+  if (!rel || rel.endsWith('/')) rel += 'index.html';
+  const full = path.join(PUBLIC_DIR, rel);
+  if (full !== PUBLIC_DIR && !full.startsWith(PUBLIC_DIR + path.sep)) return null;
+  for (const candidate of [full, `${full}.html`, path.join(full, 'index.html')]) {
+    try {
+      if (candidate.startsWith(PUBLIC_DIR) && fs.statSync(candidate).isFile()) return candidate;
+    } catch {
+      /* not there */
+    }
+  }
+  return null;
+}
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const file = resolveStaticFile(req.path);
+  if (!file) return next();
+  const entry = staticEntry(file);
+  const isHtml = entry.mime.startsWith('text/html');
+  res.set('Content-Type', entry.mime);
+  res.set('ETag', entry.etag);
+  // HTML revalidates (so a redeploy is picked up); assets may be cached a while.
+  res.set('Cache-Control', isHtml ? 'no-cache' : 'public, max-age=600');
+  if (req.get('if-none-match') === entry.etag) return res.status(304).end();
+
+  const useGzip = /\bgzip\b/.test(req.get('accept-encoding') || '');
+  const body = useGzip ? entry.gz : entry.raw;
+  if (useGzip) {
+    res.set('Content-Encoding', 'gzip');
+    res.set('Vary', 'Accept-Encoding');
+  }
+  res.set('Content-Length', body.length);
+  res.end(req.method === 'HEAD' ? undefined : body);
+});
 
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });

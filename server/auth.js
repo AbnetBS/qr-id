@@ -7,8 +7,14 @@
 const crypto = require('node:crypto');
 const { db } = require('./db');
 
-const SESSION_DAYS = 7;
+/* Long-lived session with sliding renewal: the expiry is pushed forward on
+   activity, so an admin who uses the panel every day is never signed out.
+   SESSION_DAYS is the idle window, not a hard cut-off. */
+const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
 const COOKIE_NAME = 'qrid_session';
+
+/** Renew the session once less than half of the window is left. */
+const RENEW_WHEN_REMAINING_MS = (SESSION_DAYS * 864e5) / 2;
 
 /* ---------------------------- passwords ---------------------------- */
 
@@ -60,6 +66,27 @@ const cookieOptions = (req) => ({
   secure: (req.headers['x-forwarded-proto'] || req.protocol) === 'https',
 });
 
+/**
+ * Write the session cookie.
+ *
+ * `Partitioned` (CHIPS) is added on HTTPS: it lets the cookie survive inside a
+ * cross-site frame (preview panes, embedded panels, in-app browsers), where
+ * browsers otherwise drop third-party cookies. Browsers that do not know the
+ * attribute ignore it.
+ */
+function setSessionCookie(req, res, token) {
+  const options = cookieOptions(req);
+  res.cookie(COOKIE_NAME, token, options);
+  if (!options.secure) return;
+  const header = res.getHeader('Set-Cookie');
+  if (Array.isArray(header)) {
+    header[header.length - 1] += '; Partitioned';
+    res.setHeader('Set-Cookie', header);
+  } else if (typeof header === 'string') {
+    res.setHeader('Set-Cookie', header + '; Partitioned');
+  }
+}
+
 function parseCookies(req) {
   const header = req.headers.cookie || '';
   const out = {};
@@ -100,21 +127,34 @@ function sessionForToken(token) {
     )
     .get(token);
   if (!row) return null;
-  if (new Date(row.expires_at).getTime() < Date.now()) {
+  const expiresAt = new Date(row.expires_at).getTime();
+  if (expiresAt < Date.now()) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return null;
   }
   return {
     token: row.token,
     csrf: row.csrf,
+    expiresAt,
     admin: { id: Number(row.admin_id), username: row.username, full_name: row.full_name },
   };
 }
 
 const currentSession = (req) => sessionForToken(tokenFromRequest(req));
 
-function setSessionCookie(req, res, token) {
-  res.cookie(COOKIE_NAME, token, cookieOptions(req));
+/**
+ * Sliding expiry: while the admin is active, push the expiry (and the cookie)
+ * forward so the session does not fall off a cliff in the middle of a session.
+ * Cheap — it writes at most once per half window.
+ */
+function touchSession(req, res, session) {
+  if (!session) return session;
+  if (session.expiresAt - Date.now() > RENEW_WHEN_REMAINING_MS) return session;
+  const expires = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?').run(expires, session.token);
+  session.expiresAt = new Date(expires).getTime();
+  setSessionCookie(req, res, session.token);
+  return session;
 }
 
 function clearSessionCookie(req, res) {
@@ -131,7 +171,7 @@ function cleanupSessions() {
 function requireAuth(req, res, next) {
   const session = currentSession(req);
   if (!session) return res.status(401).json({ error: 'Not signed in' });
-  req.session = session;
+  req.session = touchSession(req, res, session);
   next();
 }
 
@@ -139,7 +179,7 @@ function requireAuth(req, res, next) {
 function requireAuthPage(req, res, next) {
   const session = currentSession(req);
   if (!session) return res.redirect('/admin/?next=' + encodeURIComponent(req.originalUrl));
-  req.session = session;
+  req.session = touchSession(req, res, session);
   next();
 }
 
@@ -159,10 +199,19 @@ const WINDOW_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
 
 function loginAllowed(ip) {
+  return lockoutRemaining(ip) === 0;
+}
+
+/** Milliseconds left before this IP may try again (0 when it may). */
+function lockoutRemaining(ip) {
   const now = Date.now();
   const rec = attempts.get(ip);
-  if (!rec || now - rec.first > WINDOW_MS) return true;
-  return rec.count < MAX_ATTEMPTS;
+  if (!rec) return 0;
+  if (now - rec.first > WINDOW_MS) {
+    attempts.delete(ip);
+    return 0;
+  }
+  return rec.count < MAX_ATTEMPTS ? 0 : WINDOW_MS - (now - rec.first);
 }
 
 function noteFailedLogin(ip) {
@@ -170,6 +219,10 @@ function noteFailedLogin(ip) {
   const rec = attempts.get(ip);
   if (!rec || now - rec.first > WINDOW_MS) attempts.set(ip, { count: 1, first: now });
   else rec.count += 1;
+  // Keep the map from growing forever on a busy host.
+  if (attempts.size > 1000) {
+    for (const [key, value] of attempts) if (now - value.first > WINDOW_MS) attempts.delete(key);
+  }
 }
 
 function clearLoginAttempts(ip) {
@@ -178,11 +231,13 @@ function clearLoginAttempts(ip) {
 
 module.exports = {
   COOKIE_NAME,
+  SESSION_DAYS,
   hashPassword,
   verifyPassword,
   createSession,
   destroySession,
   currentSession,
+  touchSession,
   setSessionCookie,
   clearSessionCookie,
   cleanupSessions,
@@ -190,6 +245,7 @@ module.exports = {
   requireAuthPage,
   requireCsrf,
   loginAllowed,
+  lockoutRemaining,
   noteFailedLogin,
   clearLoginAttempts,
   parseCookies,

@@ -114,6 +114,24 @@ because a card printed from `localhost` will be useless on a phone.
 
 ## Deployment
 
+Full comparison (free tiers, measured CPU/RAM/disk numbers, per-host recipes) lives in
+**[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
+Short version — the app needs **~66 MB RAM idle, ~1 ms of CPU per scan and ~1 KB of network per
+scan**, so the only things that really matter are a **disk that survives restarts** and a host that
+**does not sleep**:
+
+| Option | Cost | Fits? |
+| --- | --- | --- |
+| Oracle Cloud Always Free ARM VM (2 OCPU / 12 GB / 200 GB disk) | $0 forever | ✅ best free — runs this repo as-is |
+| Your own PC / mini-PC + Cloudflare Tunnel | $0 | ✅ persistent disk, you own the data |
+| Cheap VPS (Hetzner, Fly.io with volume, Railway) | ~€3–5 / month | ✅ nothing to change |
+| Cloudflare Workers + D1 + R2 | $0 | ⚠️ needs a port off `node:sqlite` |
+| Render / Koyeb free | $0 | ❌ no persistent disk + 30–60 s cold start |
+
+Environment variables: `PORT`, `HOST`, `DATA_DIR` (must be on persistent storage), `APP_SECRET`,
+`SESSION_DAYS` (default 30, renews on activity), `SCAN_RETENTION_DAYS` (0 = keep all scan logs).
+
 Any always-on machine that runs Node 22.5+ works: a small VPS, a mini-PC in the office, or a
 container.
 

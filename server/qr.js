@@ -61,14 +61,32 @@ const QR_OPTIONS = {
   color: { dark: '#0b1220ff', light: '#ffffffff' },
 };
 
+/* Encoding a QR is the most expensive thing this app does (~100 ms of CPU for
+   a 1200 px PNG). The image only depends on (text, width), and `text` only
+   changes when a token is reissued or the public base URL changes — so cache
+   the last few hundred results and pay the cost once. */
+const QR_CACHE_MAX = 300;
+const qrCache = new Map();
+
+async function cached(key, make) {
+  const hit = qrCache.get(key);
+  if (hit !== undefined) return hit;
+  const value = await make();
+  qrCache.set(key, value);
+  if (qrCache.size > QR_CACHE_MAX) qrCache.delete(qrCache.keys().next().value);
+  return value;
+}
+
 const qrPngDataUrl = (text, width = 512) =>
-  QRCode.toDataURL(text, { ...QR_OPTIONS, type: 'image/png', width });
+  cached(`png-url|${width}|${text}`, () =>
+    QRCode.toDataURL(text, { ...QR_OPTIONS, type: 'image/png', width }));
 
 const qrSvgString = (text) =>
-  QRCode.toString(text, { ...QR_OPTIONS, type: 'svg', width: 512 });
+  cached(`svg|${text}`, () => QRCode.toString(text, { ...QR_OPTIONS, type: 'svg', width: 512 }));
 
 const qrPngBuffer = (text, width = 1024) =>
-  QRCode.toBuffer(text, { ...QR_OPTIONS, type: 'png', width });
+  cached(`png-buf|${width}|${text}`, () =>
+    QRCode.toBuffer(text, { ...QR_OPTIONS, type: 'png', width }));
 
 module.exports = {
   newMemberToken,
