@@ -61,6 +61,17 @@ const AM = {
   'Valid until': 'የሚያበቃበት',
   Organization: 'ድርጅት',
   'Department / Branch': 'ክፍል / ቅርንጫፍ',
+  'National ID no.': 'የብሔራዊ መታወቂያ ቁጥር',
+  'Membership type': 'የአባልነት ዓይነት',
+  'Marital status': 'የጋብቻ ሁኔታ',
+  Education: 'የትምህርት ደረጃ',
+  Occupation: 'ሙያ',
+  'Emergency contact': 'የአደጋ ጊዜ ተጠሪ',
+  'Emergency phone': 'የአደጋ ጊዜ ስልክ',
+  'Zone / City': 'ዞን / ከተማ',
+  Woreda: 'ወረዳ',
+  Kebele: 'ቀበሌ',
+  'House no.': 'የቤት ቁጥር',
   Phone: 'ስልክ',
   'Alternate phone': 'ተጨማሪ ስልክ',
   Email: 'ኢሜይል',
@@ -119,15 +130,26 @@ function publicView({ member, settings, verifyUrl }) {
 
       <div class="fields">
         ${field('Organization', settings.org_name)}
+        ${field('Membership type', member.membership_type)}
         ${field('Department / Branch', member.department)}
-        ${field('Phone', member.phone)}
-        ${field('Alternate phone', member.phone_alt)}
-        ${field('Email', member.email)}
-        ${field('Region', member.region)}
-        ${field('Address', member.address)}
+        ${field('National ID no.', member.national_id)}
         ${field('Sex', member.sex)}
         ${field('Date of birth', formatDate(member.dob))}
+        ${field('Marital status', member.marital_status)}
+        ${field('Education', member.education)}
+        ${field('Occupation', member.occupation)}
         ${field('Blood type', member.blood_type)}
+        ${field('Phone', member.phone)}
+        ${field('Alternate phone', member.phone_alt)}
+        ${field('Emergency contact', member.emergency_contact)}
+        ${field('Emergency phone', member.emergency_phone)}
+        ${field('Email', member.email)}
+        ${field('Region', member.region)}
+        ${field('Zone / City', member.zone_city)}
+        ${field('Woreda', member.woreda)}
+        ${field('Kebele', member.kebele)}
+        ${field('House no.', member.house_no)}
+        ${field('Address', member.address)}
         ${field('Card valid until', formatDate(member.expiry_date))}
         ${field('Registered on', formatDate(member.created_at))}
       </div>

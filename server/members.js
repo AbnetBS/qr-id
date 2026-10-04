@@ -10,10 +10,12 @@ const { decodeDataUrlImage } = require('./util');
 
 /* Editable columns on the member form, in form order. */
 const FIELDS = [
-  'full_name', 'full_name_alt', 'sex', 'dob',
+  'full_name', 'full_name_alt', 'sex', 'dob', 'national_id',
   'phone', 'phone_alt', 'email',
-  'region', 'address',
-  'role', 'department', 'joined_date', 'expiry_date', 'blood_type',
+  'region', 'zone_city', 'woreda', 'kebele', 'house_no', 'address',
+  'role', 'department', 'membership_type', 'joined_date', 'expiry_date',
+  'marital_status', 'education', 'occupation', 'blood_type',
+  'emergency_contact', 'emergency_phone',
   'notes', 'photo_path', 'status', 'member_no',
 ];
 
@@ -119,9 +121,10 @@ function listMembers({ q = '', status = '' } = {}) {
   const search = String(q || '').trim();
   if (search) {
     where.push(`(full_name LIKE ? OR full_name_alt LIKE ? OR member_no LIKE ? OR phone LIKE ?
-                 OR role LIKE ? OR department LIKE ? OR region LIKE ? OR email LIKE ?)`);
+                 OR role LIKE ? OR department LIKE ? OR region LIKE ? OR email LIKE ?
+                 OR national_id LIKE ? OR woreda LIKE ? OR kebele LIKE ?)`);
     const like = `%${search}%`;
-    params.push(like, like, like, like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like, like, like, like);
   }
   if (status === 'active' || status === 'revoked') {
     where.push('status = ?');
@@ -163,6 +166,9 @@ function setStatus(id, status) {
 /* ------------------------------- scans ----------------------------- */
 
 function logScan(memberId, token, req, result = 'valid') {
+  // SCAN_LOG=0 turns the scan log off completely — nothing is written to disk
+  // when a card is scanned (useful on a shared host with tight disk budget).
+  if (process.env.SCAN_LOG === '0') return;
   try {
     db.prepare('INSERT INTO scans (member_id, token, ip, user_agent, result) VALUES (?, ?, ?, ?, ?)').run(
       Number(memberId),
@@ -218,9 +224,20 @@ const toAdminJson = (m, extras = {}) => ({
   phone_alt: m.phone_alt,
   email: m.email,
   region: m.region,
+  zone_city: m.zone_city,
+  woreda: m.woreda,
+  kebele: m.kebele,
+  house_no: m.house_no,
   address: m.address,
   role: m.role,
   department: m.department,
+  membership_type: m.membership_type,
+  national_id: m.national_id,
+  marital_status: m.marital_status,
+  education: m.education,
+  occupation: m.occupation,
+  emergency_contact: m.emergency_contact,
+  emergency_phone: m.emergency_phone,
   joined_date: m.joined_date,
   expiry_date: m.expiry_date,
   blood_type: m.blood_type,

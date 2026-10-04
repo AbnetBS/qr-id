@@ -71,8 +71,25 @@ public address (see below), otherwise use the QR preview inside the panel.
 4. Anyone scanning the QR sees the member's record. Scans are logged per member.
 
 Members list: a photo grid with a neutral person icon for members who have no photo yet, search by
-name / member number / phone / branch, filter by status, **Edit / QR** and **Delete** on every card.
-Extra tools in the toolbar: *Print all QR sheets* (A4, 8 cards per page) and *Export CSV*.
+name / member number / phone / branch / national ID / woreda / kebele, filter by status, **Edit / QR**
+and **Delete** on every card. Extra tools in the toolbar: *Print all QR sheets* (A4, 8 cards per page)
+and *Export CSV*.
+
+### What a record holds
+
+Every field is optional except the name, is labelled in English **and Amharic** in the panel, and
+only filled fields appear on the scan page:
+
+*Identity* — full name (+ name in the second language), sex, date of birth, national ID number,
+blood type.
+*Contact* — phone, alternate phone, email, emergency contact name and phone.
+*Membership* — member number, position/role, department/branch, membership type, joined date, card
+valid-until date, status (active/revoked).
+*Address* — region, zone/city, woreda, kebele, house number, address.
+*Personal* — marital status, education, occupation, notes, photo.
+
+New columns are added to an existing database automatically (`ALTER TABLE`), so deploying an update
+never touches your data.
 
 ### Revoke / Reissue
 
@@ -123,6 +140,7 @@ scan**, so the only things that really matter are a **disk that survives restart
 
 | Option | Cost | Fits? |
 | --- | --- | --- |
+| **Your existing VPS (VPSDime + Coolify)** | no extra cost | ✅ **0 % CPU when idle, ~65 MB RAM, no timers or polling** — see `docker-compose.yml` |
 | Oracle Cloud Always Free ARM VM (2 OCPU / 12 GB / 200 GB disk) | $0 forever | ✅ best free — runs this repo as-is |
 | Your own PC / mini-PC + Cloudflare Tunnel | $0 | ✅ persistent disk, you own the data |
 | Cheap VPS (Hetzner, Fly.io with volume, Railway) | ~€3–5 / month | ✅ nothing to change |

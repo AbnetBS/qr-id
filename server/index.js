@@ -52,10 +52,31 @@ app.use((req, res, next) => {
   next();
 });
 
-auth.cleanupSessions();
-setInterval(auth.cleanupSessions, 60 * 60 * 1000).unref?.();
-pruneScans();
-setInterval(() => { try { pruneScans(); } catch (_) { /* never fatal */ } }, 6 * 60 * 60 * 1000).unref?.();
+/* No background timers at all: this app is idle almost all the time, and a
+   timer that fires every hour is still a wake-up that costs CPU on a shared
+   machine. Housekeeping runs once at start-up and then only when real traffic
+   arrives, at most once every MAINTENANCE_EVERY_MS. */
+const MAINTENANCE_EVERY_MS = Number(process.env.MAINTENANCE_EVERY_MS || 6 * 60 * 60 * 1000);
+let lastMaintenance = Date.now();
+
+function maintain({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastMaintenance < MAINTENANCE_EVERY_MS) return;
+  lastMaintenance = now;
+  try {
+    auth.cleanupSessions();
+    pruneScans();
+  } catch (error) {
+    console.error('maintenance failed:', error.message);
+  }
+}
+
+app.use((req, res, next) => {
+  maintain();
+  next();
+});
+
+maintain({ force: true });
 
 /* ---------------------------------------------------------------- *
  * Helpers
@@ -277,9 +298,12 @@ app.get('/api/members/:id/qr.svg', auth.requireAuth, async (req, res) => {
 app.get('/api/export.csv', auth.requireAuth, (req, res) => {
   const rows = members.listMembers({});
   const cols = [
-    'member_no', 'full_name', 'full_name_alt', 'sex', 'dob', 'phone', 'phone_alt', 'email',
-    'region', 'address', 'role', 'department', 'joined_date', 'expiry_date', 'blood_type',
-    'status', 'notes', 'created_at',
+    'member_no', 'full_name', 'full_name_alt', 'sex', 'dob', 'national_id',
+    'phone', 'phone_alt', 'email',
+    'region', 'zone_city', 'woreda', 'kebele', 'house_no', 'address',
+    'role', 'department', 'membership_type', 'joined_date', 'expiry_date',
+    'marital_status', 'education', 'occupation', 'blood_type',
+    'emergency_contact', 'emergency_phone', 'status', 'notes', 'created_at',
   ];
   const lines = [cols.join(','), ...rows.map((m) => cols.map((c) => csvCell(m[c])).join(','))];
   res
@@ -514,7 +538,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || err.statusCode || 500).json({ error: 'Server error' });
 });
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   const s = getSettings();
   console.log(`\n  QR ID server running  ->  http://localhost:${PORT}`);
   console.log(`  Admin panel           ->  http://localhost:${PORT}/admin`);
@@ -524,5 +548,17 @@ app.listen(PORT, HOST, () => {
   }
   console.log('');
 });
+
+/* Close cleanly on deploy/restart (Coolify, Docker, systemd): stop serving,
+   checkpoint the WAL so the database file is complete on disk, then exit. */
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    server.close(() => {
+      try { db.exec('PRAGMA wal_checkpoint(TRUNCATE);'); } catch (_) { /* ignore */ }
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}
 
 module.exports = app;

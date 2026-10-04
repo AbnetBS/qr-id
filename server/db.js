@@ -78,9 +78,19 @@ CREATE TABLE IF NOT EXISTS members (
   dob          TEXT NOT NULL DEFAULT '',
   phone        TEXT NOT NULL DEFAULT '',
   phone_alt    TEXT NOT NULL DEFAULT '',
-  email        TEXT NOT NULL DEFAULT '',
-  region       TEXT NOT NULL DEFAULT '',
-  address      TEXT NOT NULL DEFAULT '',
+  email          TEXT NOT NULL DEFAULT '',
+  national_id    TEXT NOT NULL DEFAULT '',
+  region         TEXT NOT NULL DEFAULT '',
+  zone_city      TEXT NOT NULL DEFAULT '',
+  woreda         TEXT NOT NULL DEFAULT '',
+  kebele         TEXT NOT NULL DEFAULT '',
+  house_no       TEXT NOT NULL DEFAULT '',
+  address        TEXT NOT NULL DEFAULT '',
+  marital_status TEXT NOT NULL DEFAULT '',
+  education      TEXT NOT NULL DEFAULT '',
+  occupation     TEXT NOT NULL DEFAULT '',
+  emergency_contact TEXT NOT NULL DEFAULT '',
+  emergency_phone   TEXT NOT NULL DEFAULT '',
   role         TEXT NOT NULL DEFAULT '',
   department   TEXT NOT NULL DEFAULT '',
   joined_date  TEXT NOT NULL DEFAULT '',
@@ -154,6 +164,15 @@ if (!settingsRow) {
 
 // 0 = the seeded admin password has never been changed.
 ensureColumn('settings', 'pw_changed', 'pw_changed INTEGER NOT NULL DEFAULT 0');
+
+/* Columns added after the first release. Existing databases get them with a
+   plain ALTER TABLE, so a deployed register keeps all of its data. */
+for (const column of [
+  'national_id', 'zone_city', 'woreda', 'kebele', 'house_no', 'membership_type',
+  'marital_status', 'education', 'occupation', 'emergency_contact', 'emergency_phone',
+]) {
+  ensureColumn('members', column, `${column} TEXT NOT NULL DEFAULT ''`);
+}
 
 /**
  * Create the first admin account (admin / admin123) when the register is empty.

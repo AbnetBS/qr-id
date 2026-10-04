@@ -31,6 +31,38 @@ Realistic traffic (5,000 scans/month): ~1 GB/month egress, ~6 seconds of CPU in 
 
 ---
 
+## 1b. Sharing a VPS that already runs something else (Coolify)
+
+This is the "the restaurant system must not pay for QR traffic" case, so it is worth being precise
+about what the app does when nobody is using it:
+
+* **No timers, no polling, no cron, no keep-alive.** The hourly session-cleanup interval was removed:
+  housekeeping now runs once at start-up and then only when a real request arrives (at most once
+  every 6 hours, `MAINTENANCE_EVERY_MS`).
+* **Measured idle cost: 0 CPU ticks over 90 seconds** — i.e. 0.00 % of a core. Node goes back to sleep
+  the moment a response is finished.
+* **~65 MB RAM at rest**, ~90 MB right after a burst of traffic. Cap it in Coolify
+  (`mem_limit: 256m` in `docker-compose.yml`) so it can never crowd the restaurant system.
+* **Disk writes:** one row per *(first) scan from a device within 60 s*, plus a photo when you upload
+  one. Set `SCAN_LOG=0` to write nothing at all on scans, or `SCAN_RETENTION_DAYS=365` to prune.
+* **Speed is not traded away:** pages and the API are gzipped (a scan is 1.4 KB), static assets are
+  pre-compressed and served from memory with ETags, settings and QR images are cached in memory, so a
+  scan is ~1 ms of CPU and the panel opens instantly.
+
+**Deploy in Coolify:** *New Resource → Docker Compose* (or Dockerfile), point it at this repo, set the
+domain (Coolify gives you HTTPS automatically), and add the volume `/app/data` so the database and
+photos survive redeploys. Then set **Public address** in the panel to that HTTPS domain.
+
+```bash
+# or by hand, on the VPS
+docker compose up -d --build
+```
+
+Estimated monthly load for a 1,000-member register with a few thousand scans: **well under 1 GB of
+traffic and a couple of seconds of CPU** — the shared VPS will not notice it.
+
+---
+
 ## 2. The one hard requirement: a disk that survives restarts
 
 The database is a single SQLite file in `data/` (see `DATA_DIR`). If the host throws the filesystem
@@ -150,6 +182,10 @@ product. **Not recommended** unless budget is the only criterion.
 | `APP_SECRET` | (file) | Signing key for the printed verification codes. Keep it — if it changes, printed codes change. |
 | `SESSION_DAYS` | `30` | Idle window before an admin is signed out. The session renews itself on activity, so this is *idle* time, not a hard cut-off. |
 | `SCAN_RETENTION_DAYS` | `0` (keep forever) | Set e.g. `365` to auto-delete scan-log rows and cap storage growth. |
+| `SCAN_LOG` | `1` | `0` = never write scan-log rows (zero disk writes on a scan). |
+| `MAINTENANCE_EVERY_MS` | `21600000` (6 h) | How often housekeeping may run — and only when real traffic arrives, never on a timer. |
+| `QR_CACHE_MAX` | `150` | Cached QR images. `0` disables the cache (trades CPU for RAM). |
+| `NODE_OPTIONS` | – | `--max-old-space-size=128` keeps the heap small on a shared box. |
 
 Also set **Public address** (`base_url`) in the admin panel to your real HTTPS address — that is the
 URL baked into every printed QR code.

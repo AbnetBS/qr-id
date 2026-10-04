@@ -65,7 +65,7 @@ const QR_OPTIONS = {
    a 1200 px PNG). The image only depends on (text, width), and `text` only
    changes when a token is reissued or the public base URL changes — so cache
    the last few hundred results and pay the cost once. */
-const QR_CACHE_MAX = 300;
+const QR_CACHE_MAX = Number(process.env.QR_CACHE_MAX ?? 150);
 const qrCache = new Map();
 
 async function cached(key, make) {

@@ -188,12 +188,7 @@
               </select>
             </label>
             <label class="f"><span>Date of birth<span class="am">የትውልድ ቀን</span></span><input type="date" id="m_dob"></label>
-            <label class="f"><span>Blood type<span class="am">የደም ዓይነት</span></span>
-              <select id="m_blood_type">
-                <option value="">—</option>
-                <option>O+</option><option>O-</option><option>A+</option><option>A-</option>
-                <option>B+</option><option>B-</option><option>AB+</option><option>AB-</option>
-              </select>
+            <label class="f"><span>National ID no.<span class="am">የብሔራዊ መታወቂያ ቁጥር</span></span><input type="text" id="m_national_id" placeholder="Fayda / national ID">
             </label>
           </div>
 
@@ -210,14 +205,52 @@
             <label class="f"><span>Department / branch<span class="am">ክፍል / ቅርንጫፍ</span></span><input type="text" id="m_department"></label>
           </div>
 
-          <div class="grid-2">
-            <label class="f"><span>Region / zone<span class="am">ክልል / ዞን</span></span><input type="text" id="m_region"></label>
-            <label class="f"><span>Address<span class="am">አድራሻ</span></span><input type="text" id="m_address"></label>
+          <div class="grid-3">
+            <label class="f"><span>Membership type<span class="am">የአባልነት ዓይነት</span></span>
+              <select id="m_membership_type">
+                <option value="">—</option>
+                <option>Regular</option><option>Founding</option><option>Honorary</option>
+                <option>Youth</option><option>Supporting</option>
+              </select>
+            </label>
+            <label class="f"><span>Joined date<span class="am">የተቀላቀለበት ቀን</span></span><input type="date" id="m_joined_date"></label>
+            <label class="f"><span>Card valid until<span class="am">የሚያበቃበት ቀን</span></span><input type="date" id="m_expiry_date"></label>
+          </div>
+
+          <div class="grid-3">
+            <label class="f"><span>Region<span class="am">ክልል</span></span><input type="text" id="m_region"></label>
+            <label class="f"><span>Zone / city<span class="am">ዞን / ከተማ</span></span><input type="text" id="m_zone_city"></label>
+            <label class="f"><span>Woreda<span class="am">ወረዳ</span></span><input type="text" id="m_woreda"></label>
+          </div>
+
+          <div class="grid-3">
+            <label class="f"><span>Kebele<span class="am">ቀበሌ</span></span><input type="text" id="m_kebele"></label>
+            <label class="f"><span>House no.<span class="am">የቤት ቁጥር</span></span><input type="text" id="m_house_no"></label>
+            <label class="f"><span>Blood type<span class="am">የደም ዓይነት</span></span>
+              <select id="m_blood_type">
+                <option value="">—</option>
+                <option>O+</option><option>O-</option><option>A+</option><option>A-</option>
+                <option>B+</option><option>B-</option><option>AB+</option><option>AB-</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="f"><span>Address<span class="am">አድራሻ</span></span><input type="text" id="m_address" placeholder="Area, street, landmark"></label>
+
+          <div class="grid-3">
+            <label class="f"><span>Marital status<span class="am">የጋብቻ ሁኔታ</span></span>
+              <select id="m_marital_status">
+                <option value="">—</option>
+                <option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option>
+              </select>
+            </label>
+            <label class="f"><span>Education<span class="am">የትምህርት ደረጃ</span></span><input type="text" id="m_education"></label>
+            <label class="f"><span>Occupation<span class="am">ሙያ</span></span><input type="text" id="m_occupation"></label>
           </div>
 
           <div class="grid-2">
-            <label class="f"><span>Joined date<span class="am">የተቀላቀለበት ቀን</span></span><input type="date" id="m_joined_date"></label>
-            <label class="f"><span>Card valid until<span class="am">የሚያበቃበት ቀን</span></span><input type="date" id="m_expiry_date"></label>
+            <label class="f"><span>Emergency contact<span class="am">የአደጋ ጊዜ ተጠሪ</span></span><input type="text" id="m_emergency_contact"></label>
+            <label class="f"><span>Emergency phone<span class="am">የአደጋ ጊዜ ስልክ</span></span><input type="tel" id="m_emergency_phone"></label>
           </div>
 
           <label class="f"><span>Notes shown when scanned<span class="am">ተጨማሪ ማስታወሻ</span></span>

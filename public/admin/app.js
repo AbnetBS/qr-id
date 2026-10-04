@@ -302,9 +302,13 @@ function memberCardHtml(m) {
 /* ---------------------------- member modal ------------------------- */
 
 const MEMBER_FIELDS = [
-  'full_name', 'full_name_alt', 'sex', 'dob', 'phone', 'phone_alt', 'email',
-  'region', 'address', 'role', 'department', 'joined_date', 'expiry_date',
-  'blood_type', 'notes', 'member_no', 'status',
+  'full_name', 'full_name_alt', 'sex', 'dob', 'national_id',
+  'phone', 'phone_alt', 'email',
+  'region', 'zone_city', 'woreda', 'kebele', 'house_no', 'address',
+  'role', 'department', 'membership_type', 'joined_date', 'expiry_date',
+  'marital_status', 'education', 'occupation', 'blood_type',
+  'emergency_contact', 'emergency_phone',
+  'notes', 'member_no', 'status',
 ];
 
 function resetMemberForm() {
